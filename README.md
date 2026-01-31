@@ -1,21 +1,23 @@
 AmiBinkD Source Project
 Reviving and Modernizing BinkD for the Commodore Amiga
 Overview
-The AmiBinkD Source Project is an active effort to deliver a fully restored, modernized, and stable AmigaOS port of BinkD, the Fidonet mailer. The original Amiga port had fallen into disrepair; today, it has been rebuilt into a clean, maintainable, standards‑compliant codebase that runs natively on AmigaOS 3.x systems.
-This revival is proudly driven by the Reign of Fire BBS Group —
-https://www.rofbbs.com — continuing their mission to preserve the Amiga’s legacy in the Fidonet community while empowering new sysops and developers.
+The AmiBinkD Source Project is an active effort to deliver a fully restored, modernized, and stable AmigaOS port of BinkD, the Fidonet mailer.
+The original Amiga port had fallen into disrepair; today, it has been rebuilt into a clean, maintainable, standards‑compliant codebase that runs natively on AmigaOS 3.x systems.
+This revival is proudly driven by the Reign of Fire BBS Group:
+https://www.rofbbs.com
+continuing their mission to preserve the Amiga’s legacy in the Fidonet community while empowering new sysops and developers.
 Current Status
 AmiBinkD now includes:
-• 	✔ Fully restored and reorganized source tree
-• 	✔ RFC2553‑compatible networking (getaddrinfo, getnameinfo, sockaddr shims)
-• 	✔ SRV record support for modern FTN hostnames
-• 	✔ Complete  /  fallback for non‑POSIX toolchains
-• 	✔ Amiga‑native socket handling (bsdsocket.library)
-• 	✔ Clean, dependency‑free Makefile for GCC/VBCC
-• 	✔ Updated tools, logging, memory management, and packet helpers
-• 	✔ Builds cleanly on AmigaOS 3.x with no warnings
-The foundation is now solid, and the project has moved from “recovery” to active development and refinement.
-Project Goals (Updated)
+• 	Fully restored and reorganized source tree
+• 	RFC2553‑compatible networking (getaddrinfo, getnameinfo, sockaddr shims)
+• 	SRV record support for modern FTN hostnames
+• 	Complete snprintf() / vsnprintf() fallback for non‑POSIX toolchains
+• 	Amiga‑native socket handling via bsdsocket.library
+• 	Clean, dependency‑free Makefile for GCC/VBCC
+• 	Updated tools, logging, memory management, and packet helpers
+• 	Builds cleanly on AmigaOS 3.x with no warnings
+The foundation is now solid, and the project has moved from recovery into active development and refinement.
+Project Goals
 • 	Maintain a stable, modern Amiga‑native BinkD implementation
 • 	Improve performance and reliability on real Amiga hardware
 • 	Expand compatibility with contemporary FTN mailers and hubs
@@ -43,9 +45,6 @@ How to Contribute
 3. 	Submit pull requests with clear explanations
 4. 	Share build/test results in Issues or Discussions
 Community
-AmiBinkD is a collaborative preservation and modernization effort. Whether you contribute code, testing, documentation, or historical insight, you’re helping ensure that the Amiga continues to participate in the networks it helped pioneer.
-Together, we keep the Amiga connected — not just to Fidonet, but to its own living history.of sysops.
-
----
-
-### ⚡ Let’s bring AmiBinkD back to life — together!
+AmiBinkD is a collaborative preservation and modernization effort.
+Whether you contribute code, testing, documentation, or historical insight, you’re helping ensure that the Amiga continues to participate in the networks it helped pioneer.
+Together, we keep the Amiga connected — not just to Fidonet, but to its own living history.
