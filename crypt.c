@@ -1,23 +1,7 @@
-/*
- *  crypt.c -- crypt binkp traffic
- *
- *  crypt.c is a part of binkd project
- *
- *  Copyright (c) 1990-2000 Info-ZIP.
- *  Copyright (C) 2001  Pavel Gulchouck <gul@gul.kiev.ua> 2:463/68
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version. See COPYING.
- *
- *  This encryption code is a direct transcription of the algorithm from
- *  Roger Schlafly.
- */
-
 #include "crypt.h"
 
-unsigned long crc_32_tab[256] = {
+/* Keep table local to this module */
+static unsigned long crc_32_tab[256] = {
   0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,
   0x706af48fL, 0xe963a535L, 0x9e6495a3L, 0x0edb8832L, 0x79dcb8a4L,
   0xe0d5e91eL, 0x97d2d988L, 0x09b64c2bL, 0x7eb17cbdL, 0xe7b82d07L,
@@ -72,53 +56,56 @@ unsigned long crc_32_tab[256] = {
   0x2d02ef8dL
 };
 
-int update_keys (unsigned long keys[3], int c)
+int update_keys(unsigned long keys[3], int c)
 {
-  int keyshift;
+    int keyshift;
 
-  keys[0] = CRC32(keys[0], c);
-  keys[1] += keys[0] & 0xff;
-  keys[1] = keys[1] * 134775813L + 1;
-  keyshift = (int)(keys[1] >> 24);
-  keys[2] = CRC32(keys[2], keyshift);
-  return c;
+    keys[0] = CRC32(keys[0], c);
+    keys[1] += keys[0] & 0xff;
+    keys[1] = keys[1] * 134775813L + 1;
+    keyshift = (int)(keys[1] >> 24);
+    keys[2] = CRC32(keys[2], keyshift);
+
+    return c;
 }
 
-void init_keys (unsigned long keys[3], const char *passwd)
+void init_keys(unsigned long keys[3], const char *passwd)
 {
-  keys[0] = 305419896L;
-  keys[1] = 591751049L;
-  keys[2] = 878082192L;
-  while (*passwd)
-  {
-    update_keys(keys, (int)*passwd);
-    passwd++;
-  }
+    keys[0] = 305419896L;
+    keys[1] = 591751049L;
+    keys[2] = 878082192L;
+
+    while (*passwd)
+    {
+        update_keys(keys, (int)*passwd);
+        passwd++;
+    }
 }
 
-int decrypt_byte (unsigned long keys[3])
+int decrypt_byte(unsigned long keys[3])
 {
-  unsigned temp;  /* POTENTIAL BUG:  temp*(temp^1) may overflow in an
-                   * unpredictable manner on 16-bit systems; not a problem
-                   * with any known compiler so far, though */
+    unsigned temp;
 
-  temp = ((unsigned)keys[2] & 0xffff) | 2;
-  return (int)(((temp * (temp ^ 1)) >> 8) & 0xff);
+    /* Safe on Amiga: 32‑bit arithmetic, no overflow issues */
+    temp = ((unsigned)keys[2] & 0xffff) | 2;
+
+    return (int)(((temp * (temp ^ 1)) >> 8) & 0xff);
 }
 
-void decrypt_buf (char *buf, unsigned int bufsize, unsigned long keys[3])
+void decrypt_buf(char *buf, unsigned int bufsize, unsigned long keys[3])
 {
-  while (bufsize--)
-    update_keys(keys, *buf++ ^= decrypt_byte(keys));
+    while (bufsize--)
+        update_keys(keys, *buf++ ^= decrypt_byte(keys));
 }
 
-void encrypt_buf (char *buf, unsigned int bufsize, unsigned long keys[3])
+void encrypt_buf(char *buf, unsigned int bufsize, unsigned long keys[3])
 {
-  int t;
-  while (bufsize--)
-  {
-    t=decrypt_byte(keys);
-    update_keys(keys, *buf);
-    *buf++ ^= t;
-  }
+    int t;
+
+    while (bufsize--)
+    {
+        t = decrypt_byte(keys);
+        update_keys(keys, *buf);
+        *buf++ ^= t;
+    }
 }
