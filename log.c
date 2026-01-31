@@ -1,6 +1,7 @@
 // log.c — Reign of Fire BBS Group FTN Engine Logging
 // Amiga‑Optimized Logging Backend
-// Continuation of AmiBinkd v9.02 (AmiBinkd PRO/FREEWARE, AmiCron/AmiTask Edition)
+// AmiBinkd v9.10 — ROF Continuation Edition
+// Based on AmiBinkd v9.02 (AmiBinkd PRO/FREEWARE, AmiCron/AmiTask Edition)
 // Originally coded 2011–2014 by Rudi Timmermans
 
 #include "log.h"
@@ -45,6 +46,7 @@ void log_open(const char *path) {
             "============================================================\n"
             "   ***  REIGN OF FIRE BBS GROUP — FTN ENGINE ONLINE  ***\n"
             "------------------------------------------------------------\n"
+            "   AmiBinkd v9.10 — ROF Continuation Edition\n"
             "   Sysop: SpitfireTN / Gary McCulloch\n"
             "   Network Hub • Amiga‑Powered • Est. 2024\n"
             "   https://rofbbs.com\n"
@@ -53,7 +55,7 @@ void log_open(const char *path) {
 
         /* Version Tag */
         const char *version =
-            "ROF FTN Engine Build: 10.0 (AmiBinkd Legacy Continuation)\n"
+            "ROF FTN Engine Build: AmiBinkd v9.10 (Legacy Continuation)\n"
             "Log Started: ";
 
         /* Write everything */
@@ -65,6 +67,13 @@ void log_open(const char *path) {
     }
 }
 
+void log_write(const char *msg) {
+    if (fh) Write(fh, msg, strlen(msg));
+}
+
+void log_close(void) {
+    if (fh) Close(fh);
+}
 void log_write(const char *msg) {
     if (fh) Write(fh, msg, strlen(msg));
 }
