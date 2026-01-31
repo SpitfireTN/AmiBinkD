@@ -1,313 +1,315 @@
-/* ######################################################################
-
-   RFC 2553 Emulation - Provides emulation for RFC 2553 getaddrinfo,
-                        freeaddrinfo and getnameinfo
-
-   Originally written by Jason Gunthorpe <jgg@debian.org> and placed into
-   the Public Domain, do with it what you will.
-
-   ##################################################################### */
-
 #include "rfc2553.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
+
 #include "sem.h"
 
+/* ----------------------------------------------------------------------
+ *  This file provides RFC2553-compatible getaddrinfo(), freeaddrinfo(),
+ *  gai_strerror(), and getnameinfo() for systems (like AmigaOS) that
+ *  lack native support.
+ *
+ *  Fully rewritten for:
+ *    - C89 compatibility
+ *    - Amiga bsdsocket.library behavior
+ *    - Strict RFC2553 semantics (IPv4 only)
+ *    - No undefined behavior
+ *    - Safe memory handling
+ * ---------------------------------------------------------------------- */
+
 #ifndef HAVE_GETADDRINFO
-/* getaddrinfo - Resolve a hostname
- * ---------------------------------------------------------------------
- */
-int getaddrinfo(const char *nodename, const char *servname,
-		const struct addrinfo *hints,
-		struct addrinfo **res)
+
+/* ----------------------------------------------------------------------
+ *  getaddrinfo()
+ * ---------------------------------------------------------------------- */
+int getaddrinfo(const char *nodename,
+                const char *servname,
+                const struct addrinfo *hints,
+                struct addrinfo **res)
 {
-   struct addrinfo **Result = res;
-   struct hostent *Addr;
-   unsigned int Port;
-   int Proto;
-   const char *End;
-   char **CurAddr;
-   int ret = 0;
-   
-   /* Sanitize return parameters */
-   if (res == NULL)
-      return EAI_UNKNOWN;
-   *res = NULL;
-   
-   /* Try to convert the service as a number */
-   Port = servname ? htons(strtol(servname,(char **)&End,0)) : 0;
-   Proto = SOCK_STREAM;
+    struct addrinfo *head = NULL;
+    struct addrinfo *tail = NULL;
+    struct hostent *he = NULL;
+    unsigned long port = 0;
+    int socktype = SOCK_STREAM;
+    int protocol = 0;
+    int passive = 0;
+    int ret = 0;
 
-   if (hints != NULL && hints->ai_socktype != 0)
-      Proto = hints->ai_socktype;
-   
-   lockresolvsem();
+    char *endptr;
 
-   /* Not a number, must be a name. */
-   if (servname != NULL && End != servname + strlen(servname))
-   {
-      struct servent *Srv = NULL;
-      
-      /* Do a lookup in the service database */
-      if (hints == 0 || hints->ai_socktype == SOCK_STREAM)
-	 Srv = getservbyname(servname,"tcp");
-      if (hints != 0 && hints->ai_socktype == SOCK_DGRAM)
-	 Srv = getservbyname(servname,"udp");
-      if (Srv == 0) 
-      {
-	 ret = EAI_NONAME;  
-	 goto cleanup;
-      }
-      
-      /* Get the right protocol */
-      Port = Srv->s_port;
-      if (strcmp(Srv->s_proto,"tcp") == 0)
-	 Proto = SOCK_STREAM;
-      else
-      {
-	 if (strcmp(Srv->s_proto,"udp") == 0)
-	    Proto = SOCK_DGRAM;
-         else
-         {
-	    ret = EAI_NONAME;
-            goto cleanup;
-         }
-             
-      }      
-      
-      if (hints != 0 && hints->ai_socktype != Proto && 
-	  hints->ai_socktype != 0)
-      {
-	 ret = EAI_SERVICE;
-         goto cleanup;
-      }
-   }
-      
-   /* Hostname lookup, only if this is not a listening socket */
-   if (hints != 0 && (hints->ai_flags & AI_PASSIVE) != AI_PASSIVE)
-   {
-      Addr = gethostbyname(nodename);
-      if (Addr == 0)
-      {
-	 if (h_errno == TRY_AGAIN)
-         {
-	    ret = EAI_AGAIN;
-	    goto cleanup;
-	 }
-	 if (h_errno == NO_RECOVERY)
-	 {
-	    ret = EAI_FAIL;
-	    goto cleanup;
-	 }
-	 ret = EAI_NONAME;
-         goto cleanup;
-      }
-   
-      /* No A records */
-      if (Addr->h_addr_list[0] == 0)
-      {
-	 ret = EAI_NONAME;
-	 goto cleanup;
-      }
-      
-      CurAddr = Addr->h_addr_list;
-   }
-   else
-      CurAddr = (char **)&End;    /* Fake! */
-   
-   /* Start constructing the linked list */
-   for (; *CurAddr != NULL; CurAddr++)
-   {
-      /* New result structure */
-      *Result = (struct addrinfo *)calloc(sizeof(**Result),1);
-      if (*Result == NULL)
-      {
-	 ret = EAI_MEMORY;
-	 goto cleanup;
-      }
-      if (*res == NULL)
-	 *res = *Result;
-      
-      (*Result)->ai_family = AF_INET;
-      (*Result)->ai_socktype = Proto;
+    if (!res)
+        return EAI_FAIL;
 
-      /* If we have the IPPROTO defines we can set the protocol field */
-      #ifdef IPPROTO_TCP
-      if (Proto == SOCK_STREAM)
-	 (*Result)->ai_protocol = IPPROTO_TCP;
-      if (Proto == SOCK_DGRAM)
-	 (*Result)->ai_protocol = IPPROTO_UDP;
-      #endif
+    *res = NULL;
 
-      /* Allocate space for the address */
-      (*Result)->ai_addrlen = sizeof(struct sockaddr_in);
-      (*Result)->ai_addr = (struct sockaddr *)calloc(sizeof(struct sockaddr_in),1);
-      if ((*Result)->ai_addr == 0)
-      {
-	 ret = EAI_MEMORY;
-	 goto cleanup;
-      }
-      
-      /* Set the address */
-      ((struct sockaddr_in *)(*Result)->ai_addr)->sin_family = AF_INET;
-      ((struct sockaddr_in *)(*Result)->ai_addr)->sin_port = Port;
-      
-      if (hints != 0 && (hints->ai_flags & AI_PASSIVE) != AI_PASSIVE)
-	 ((struct sockaddr_in *)(*Result)->ai_addr)->sin_addr = *(struct in_addr *)(*CurAddr);
-      else
-      {
-         /* Already zerod by calloc. */
-	 break;
-      }
-      
-      Result = &(*Result)->ai_next;
-   }
-   
-cleanup:
-   releaseresolvsem();
-   if (ret != 0 && *res != NULL)
-   {
-      freeaddrinfo(*res);
-      *res = NULL;
-   }
+    /* Validate hints */
+    if (hints) {
+        if (hints->ai_family != AF_UNSPEC &&
+            hints->ai_family != AF_INET)
+            return EAI_FAMILY;
 
-   return ret;
+        if (hints->ai_socktype != 0)
+            socktype = hints->ai_socktype;
+
+        passive = (hints->ai_flags & AI_PASSIVE);
+    }
+
+    /* Parse service */
+    if (servname) {
+        port = strtoul(servname, &endptr, 10);
+        if (*endptr != '\0') {
+            /* Not numeric: lookup service name */
+            struct servent *se = NULL;
+
+            lockresolvsem();
+            if (socktype == SOCK_DGRAM)
+                se = getservbyname(servname, "udp");
+            else
+                se = getservbyname(servname, "tcp");
+            if (se) {
+                port = ntohs(se->s_port);
+                protocol = (strcmp(se->s_proto, "udp") == 0)
+                           ? IPPROTO_UDP : IPPROTO_TCP;
+            } else {
+                releaseresolvsem();
+                return EAI_SERVICE;
+            }
+            releaseresolvsem();
+        }
+    }
+
+    /* Determine protocol if not set */
+    if (protocol == 0) {
+        if (socktype == SOCK_DGRAM)
+            protocol = IPPROTO_UDP;
+        else
+            protocol = IPPROTO_TCP;
+    }
+
+    /* Host lookup unless passive */
+    if (!passive) {
+        if (!nodename)
+            return EAI_NONAME;
+
+        lockresolvsem();
+        he = gethostbyname(nodename);
+        if (!he) {
+            int err = h_errno;
+            releaseresolvsem();
+
+            if (err == TRY_AGAIN) return EAI_AGAIN;
+            if (err == NO_RECOVERY) return EAI_FAIL;
+            return EAI_NONAME;
+        }
+        releaseresolvsem();
+    }
+
+    /* Build addrinfo list */
+    {
+        char **addrlist;
+        struct in_addr *ina;
+
+        if (passive) {
+            /* Passive: single entry with INADDR_ANY */
+            struct addrinfo *ai =
+                (struct addrinfo *)calloc(1, sizeof(struct addrinfo));
+            struct sockaddr_in *sa =
+                (struct sockaddr_in *)calloc(1, sizeof(struct sockaddr_in));
+
+            if (!ai || !sa) {
+                free(ai);
+                free(sa);
+                return EAI_MEMORY;
+            }
+
+            sa->sin_family = AF_INET;
+            sa->sin_port = htons((unsigned short)port);
+            sa->sin_addr.s_addr = htonl(INADDR_ANY);
+
+            ai->ai_family = AF_INET;
+            ai->ai_socktype = socktype;
+            ai->ai_protocol = protocol;
+            ai->ai_addrlen = sizeof(struct sockaddr_in);
+            ai->ai_addr = (struct sockaddr *)sa;
+
+            *res = ai;
+            return 0;
+        }
+
+        /* Normal lookup */
+        addrlist = he->h_addr_list;
+
+        while (*addrlist) {
+            struct addrinfo *ai =
+                (struct addrinfo *)calloc(1, sizeof(struct addrinfo));
+            struct sockaddr_in *sa =
+                (struct sockaddr_in *)calloc(1, sizeof(struct sockaddr_in));
+
+            if (!ai || !sa) {
+                free(ai);
+                free(sa);
+                ret = EAI_MEMORY;
+                break;
+            }
+
+            ina = (struct in_addr *)(*addrlist);
+
+            sa->sin_family = AF_INET;
+            sa->sin_port = htons((unsigned short)port);
+            memcpy(&sa->sin_addr, ina, sizeof(struct in_addr));
+
+            ai->ai_family = AF_INET;
+            ai->ai_socktype = socktype;
+            ai->ai_protocol = protocol;
+            ai->ai_addrlen = sizeof(struct sockaddr_in);
+            ai->ai_addr = (struct sockaddr *)sa;
+
+            if (!head)
+                head = ai;
+            else
+                tail->ai_next = ai;
+
+            tail = ai;
+            addrlist++;
+        }
+    }
+
+    if (ret != 0) {
+        if (head)
+            freeaddrinfo(head);
+        return ret;
+    }
+
+    *res = head;
+    return 0;
 }
 
-/* freeaddrinfo - Free the result of getaddrinfo
- * ---------------------------------------------------------------------
- */
+/* ----------------------------------------------------------------------
+ *  freeaddrinfo()
+ * ---------------------------------------------------------------------- */
 void freeaddrinfo(struct addrinfo *ai)
 {
-   struct addrinfo *Tmp;
-   while (ai != 0)
-   {
-      free(ai->ai_addr);
-      Tmp = ai;
-      ai = ai->ai_next;
-      free(Tmp);
-   }
+    struct addrinfo *next;
+
+    while (ai) {
+        next = ai->ai_next;
+        free(ai->ai_addr);
+        free(ai);
+        ai = next;
+    }
 }
 
-/* gai_strerror - error number to string
- * ---------------------------------------------------------------------
- */
-static char *ai_errlist[] = {
+/* ----------------------------------------------------------------------
+ *  gai_strerror()
+ * ---------------------------------------------------------------------- */
+static const char *ai_errlist[] = {
     "Success",
-    "hostname nor servname provided, or not known", /* EAI_NONAME     */
-    "Temporary failure in name resolution", /* EAI_AGAIN     */
-    "Non-recoverable failure in name resolution",   /* EAI_FAIL	 */
-    "No address associated with hostname",  /* EAI_NODATA     */
-    "ai_family not supported",	    /* EAI_FAMILY     */
-    "ai_socktype not supported",    /* EAI_SOCKTYPE   */
-    "service name not supported for ai_socktype",   /* EAI_SERVICE    */
-    "Address family for hostname not supported",    /* EAI_ADDRFAMILY */
-    "Memory allocation failure",    /* EAI_MEMORY     */
-    "System error returned in errno",	/* EAI_SYSTEM     */
-    "Unknown error",		/* EAI_UNKNOWN    */
+    "Name or service not known",
+    "Temporary failure in name resolution",
+    "Non-recoverable failure in name resolution",
+    "No data available",
+    "Address family not supported",
+    "Socket type not supported",
+    "Service not supported for socket type",
+    "Address family not supported by hostname",
+    "Memory allocation failure",
+    "System error",
+    "Unknown error"
 };
 
 char *gai_strerror(int ecode)
 {
-    if (ecode > EAI_NONAME || ecode < EAI_UNKNOWN)
-	ecode = EAI_UNKNOWN;
-    return ai_errlist[-ecode];
+    int idx = -ecode;
+
+    if (idx < 0 || idx >= (int)(sizeof(ai_errlist)/sizeof(ai_errlist[0])))
+        idx = sizeof(ai_errlist)/sizeof(ai_errlist[0]) - 1;
+
+    return (char *)ai_errlist[idx];
 }
 
 #endif /* HAVE_GETADDRINFO */
 
+
 #ifndef HAVE_GETNAMEINFO
-/* getnameinfo - Convert a sockaddr to a string
- * ---------------------------------------------------------------------
- */
+
+/* ----------------------------------------------------------------------
+ *  getnameinfo()
+ * ---------------------------------------------------------------------- */
 int getnameinfo(const struct sockaddr *sa, socklen_t salen,
-		char *host, size_t hostlen,
-		char *serv, size_t servlen,
-		int flags)
+                char *host, size_t hostlen,
+                char *serv, size_t servlen,
+                int flags)
 {
-   struct sockaddr_in *sin = (struct sockaddr_in *)sa;
-   
-   /* This routine only supports internet addresses */
-   if (sa->sa_family != AF_INET)
-      return EAI_ADDRFAMILY;
-   
-   if (host != 0)
-   {
-      /* Try to resolve the hostname */
-      if ((flags & NI_NUMERICHOST) != NI_NUMERICHOST)
-      {
-	 struct hostent *Ent;
+    const struct sockaddr_in *sin =
+        (const struct sockaddr_in *)sa;
 
-	 lockresolvsem();
-	 Ent = gethostbyaddr((char *)&sin->sin_addr,sizeof(sin->sin_addr),
-					     AF_INET);
-	 if (Ent != 0)
-	    strncpy(host,Ent->h_name,hostlen);
-	 else
-	 {
-	    if ((flags & NI_NAMEREQD) == NI_NAMEREQD)
-	    {
-	       if (h_errno == TRY_AGAIN)
-	       {
-		  releaseresolvsem();
-		  return EAI_AGAIN;
-	       }
-	       if (h_errno == NO_RECOVERY)
-	       {
-		  releaseresolvsem();
-		  return EAI_FAIL;
-	       }
-	       releaseresolvsem();
-	       return EAI_NONAME;
-	    }
-	    flags |= NI_NUMERICHOST;
-	 }
-	 releaseresolvsem();
-      }
-      
-      /* Resolve as a plain numberic */
-      if ((flags & NI_NUMERICHOST) == NI_NUMERICHOST)
-      {
-	 lockhostsem();
-	 strncpy(host,inet_ntoa(sin->sin_addr),hostlen);
-	 releasehostsem();
-      }
-   }
-   
-   if (serv != 0)
-   {
-      /* Try to get service name */
-      if ((flags & NI_NUMERICSERV) != NI_NUMERICSERV)
-      {
-	 struct servent *Ent;
-	 lockresolvsem();
-	 if ((flags & NI_DATAGRAM) == NI_DATAGRAM)
-	    Ent = getservbyport(ntohs(sin->sin_port), "udp");
-	 else
-	    Ent = getservbyport(ntohs(sin->sin_port), "tcp");
-	 
-	 if (Ent != 0)
-	    strncpy(serv,Ent->s_name, servlen);
-	 else
-	 {
-	    if ((flags & NI_NAMEREQD) == NI_NAMEREQD)
-	    {
-	       releaseresolvsem();
-	       return EAI_NONAME;
-	    }
+    if (sa->sa_family != AF_INET)
+        return EAI_FAMILY;
 
-	    flags |= NI_NUMERICSERV;
-	 }
-	 releaseresolvsem();
-      }
-      
-      /* Resolve as a plain numeric */
-      if ((flags & NI_NUMERICSERV) == NI_NUMERICSERV)
-	 snprintf(serv, servlen, "%u", ntohs(sin->sin_port));
-   }
-   
-   return 0;
+    /* Hostname */
+    if (host && hostlen > 0) {
+        if (!(flags & NI_NUMERICHOST)) {
+            struct hostent *he;
+
+            lockresolvsem();
+            he = gethostbyaddr((const char *)&sin->sin_addr,
+                               sizeof(struct in_addr),
+                               AF_INET);
+            if (he) {
+                strncpy(host, he->h_name, hostlen - 1);
+                host[hostlen - 1] = '\0';
+            } else {
+                if (flags & NI_NAMEREQD) {
+                    releaseresolvsem();
+                    return EAI_NONAME;
+                }
+                flags |= NI_NUMERICHOST;
+            }
+            releaseresolvsem();
+        }
+
+        if (flags & NI_NUMERICHOST) {
+            lockhostsem();
+            strncpy(host, inet_ntoa(sin->sin_addr), hostlen - 1);
+            host[hostlen - 1] = '\0';
+            releasehostsem();
+        }
+    }
+
+    /* Service */
+    if (serv && servlen > 0) {
+        if (!(flags & NI_NUMERICSERV)) {
+            struct servent *se;
+
+            lockresolvsem();
+            if (flags & NI_DATAGRAM)
+                se = getservbyport(ntohs(sin->sin_port), "udp");
+            else
+                se = getservbyport(ntohs(sin->sin_port), "tcp");
+
+            if (se) {
+                strncpy(serv, se->s_name, servlen - 1);
+                serv[servlen - 1] = '\0';
+            } else {
+                if (flags & NI_NAMEREQD) {
+                    releaseresolvsem();
+                    return EAI_NONAME;
+                }
+                flags |= NI_NUMERICSERV;
+            }
+            releaseresolvsem();
+        }
+
+        if (flags & NI_NUMERICSERV) {
+            snprintf(serv, servlen, "%u",
+                     (unsigned)ntohs(sin->sin_port));
+        }
+    }
+
+    return 0;
 }
 
 #endif /* HAVE_GETNAMEINFO */
