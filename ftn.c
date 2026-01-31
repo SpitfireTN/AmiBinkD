@@ -17,7 +17,7 @@ void ftn_loop(void)
     log_write("   ***  REIGN OF FIRE BBS GROUP — FTN ENGINE ONLINE  ***\n");
     log_write("------------------------------------------------------------\n");
     log_write("   Sysop: SpitfireTN / Gary McCulloch\n");
-    log_write("   Network Hub • Amiga‑Powered • Est. 2010\n");
+    log_write("   Network Hub • Amiga‑Powered • Est. 2024\n");
     log_write("   https://rofbbs.com\n");
     log_write("============================================================\n");
     log_write("\n");
