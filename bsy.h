@@ -1,3 +1,5 @@
+/* bsy.h – AmigaOS 3.x–safe */
+
 #ifndef _BSY_H
 #define _BSY_H
 
