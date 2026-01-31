@@ -1,62 +1,60 @@
-/*
- *  breaksig.c -- SIGBREAK, etc. signal handlers
- *
- *  breaksig.c is a part of binkd project
- *
- *  Copyright (C) 1996  Dima Maloff, 5047/13
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version. See COPYING.
- */
+/* breaksig.c – AmigaOS 3.x break handling (no POSIX signals) */
+
+#include <exec/types.h>
+#include <exec/tasks.h>
+#include <proto/exec.h>
 
 #include <stdlib.h>
-#include <signal.h>
 #include <stdio.h>
+
 #include "sys.h"
 #include "common.h"
 #include "tools.h"
 #include "sem.h"
 
-static void exitsig (int arg)
+/*
+ * AmigaOS does NOT support POSIX signals.
+ * Instead, we watch for SIGBREAKF_CTRL_C (Ctrl-C) or other break bits.
+ */
+
+#ifndef SIGBREAKF_CTRL_C
+#define SIGBREAKF_CTRL_C (1L << 12)
+#endif
+
+extern int binkd_exit;
+
+/* Called when a break is detected */
+static void amiga_break(void)
 {
-  /* Log (0, ...) will call exit(), exit() will call exitlist */
-#if defined(HAVE_FORK) && !defined(HAVE_THREADS)
-  if (pidcmgr)
-    Log (0, "got signal #%i. Killing %i and quitting...", arg, (int) pidcmgr);
-  else
-    Log (0, "got signal #%i.", arg);
-#else
-  Log (1, "got signal #%i.", arg);
-  binkd_exit = 1;
-#ifdef WITH_PTHREADS
-  if (tidsmgr && tidsmgr != (int) PID ())
-  {
-    Log(6, "Resend signal to servmgr");
-    pthread_kill(servmgr_thread, arg);
-  } else if (!server_flag)
-    PostSem(&wakecmgr);
-#endif
-#endif
+    Log(1, "Break signal received.");
+    binkd_exit = 1;
 }
 
-/* Set up break handler, set up exit list if needed */
-int set_break_handlers (void)
+/*
+ * Install exit handler and prepare break handling.
+ * On AmigaOS this does NOT install signal() handlers.
+ */
+int set_break_handlers(void)
 {
-  atexit (exitfunc);
+    atexit(exitfunc);
 
-#ifdef SIGBREAK
-  signal (SIGBREAK, exitsig);
-#endif
-#ifdef SIGHUP
-  signal (SIGHUP, SIG_IGN);
-#endif
-#ifdef SIGINT
-  signal (SIGINT, exitsig);
-#endif
-#ifdef SIGTERM
-  signal (SIGTERM, exitsig);
-#endif
-  return 1;
+    /* Nothing else to install — Amiga break handling is polled */
+
+    return 1;
+}
+
+/*
+ * Called periodically from the main loop to check for Ctrl-C.
+ */
+void check_break(void)
+{
+    ULONG sigs;
+
+    /* Check if any break bits are pending */
+    sigs = SetSignal(0L, 0L);
+
+    if (sigs & SIGBREAKF_CTRL_C)
+    {
+        amiga_break();
+    }
 }
