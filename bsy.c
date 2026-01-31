@@ -1,3 +1,5 @@
+/* bsy.c – AmigaOS 3.x–safe */
+
 --- a/bsy.c
 +++ b/bsy.c
 @@ -28,6 +28,9 @@ struct _BSY_ADDR
