@@ -1,3 +1,5 @@
+/* client.c – AmigaOS 3.x–safe client module */
+
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
