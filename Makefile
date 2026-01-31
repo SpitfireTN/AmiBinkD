@@ -1,16 +1,45 @@
+###############################################################################
+# AmiBinkD Makefile (Modern Auto‑Build Version)
+# Target: AmigaOS 3.x (GCC), no ixemul, bsdsocket.library
+###############################################################################
+
 CC      = gcc
 CFLAGS  = -O2 -Wall -DAMIGA -DPROTOTYPES=1
 LIBS    = -lbsdsocket
 
-OBJS =  binkd.o protocol.o client.o server.o \
-        ftnaddr.o ftnnode.o ftnq.o inbound.o readcfg.o readflo.o \
-        tools.o binlog.o crypt.o md5c.o md5b.o bsy.o \
-        iptools.o rfc2553.o srv_gai.o snprintf.o xalloc.o compress.o \
-        exitproc.o breaksig.o run.o \
-        main.o net.o ftn.o log.o amiga_glue.o
+###############################################################################
+# Source Files
+###############################################################################
+
+SRCS =  binkd.c protocol.c client.c server.c \
+        ftnaddr.c ftnnode.c ftnq.c inbound.c readcfg.c readflo.c \
+        tools.c binlog.c crypt.c md5c.c md5b.c bsy.c \
+        iptools.c rfc2553.c srv_gai.c snprintf.c xalloc.c compress.c \
+        exitproc.c breaksig.c run.c \
+        main.c net.c ftn.c log.c amiga_glue.c
+
+OBJS = $(SRCS:.c=.o)
+
+###############################################################################
+# Build Rules
+###############################################################################
+
+all: amibinkd
 
 amibinkd: $(OBJS)
-	$(CC) -o amibinkd $(OBJS) $(LIBS)
+	$(CC) -o $@ $(OBJS) $(LIBS)
+
+# Generic .c → .o rule
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+###############################################################################
+# Cleanup
+###############################################################################
 
 clean:
 	rm -f *.o amibinkd
+
+###############################################################################
+# End of Makefile
+###############################################################################
