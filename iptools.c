@@ -35,8 +35,21 @@
 void setsockopts (SOCKET s)
 {
 
+#if defined(AMIGA)
+  /* Classic AmigaOS bsdsocket.library sockets aren't AmigaDOS file
+   * handles and don't sit in the same fd namespace regular ioctl()/
+   * fcntl() operate on (that unification is what ixemul provided, and
+   * this port deliberately doesn't use it) - both calls used to silently
+   * fail here ("No such file or directory"), meaning sockets were never
+   * actually going non-blocking. IoctlSocket() is bsdsocket.library's
+   * own real equivalent. */
+  LONG arg = 1;
+  if (IoctlSocket(s, FIONBIO, (APTR)&arg) < 0)
+    Log (1, "IoctlSocket (FIONBIO): %s", TCPERR ());
+#else
+
 #if defined(FIONBIO)
-#if defined(UNIX) || defined(IBMTCPIP) || defined(AMIGA)
+#if defined(UNIX) || defined(IBMTCPIP)
   int arg;
 
   arg = 1;
@@ -53,10 +66,12 @@ void setsockopts (SOCKET s)
 #endif
 #endif
 
-#if defined(UNIX) || defined(EMX) || defined(AMIGA)
+#if defined(UNIX) || defined(EMX)
   if (fcntl (s, F_SETFL, O_NONBLOCK) == -1)
     Log (1, "fcntl: %s", strerror (errno));
 #endif
+
+#endif /* !AMIGA */
 }
 
 /*

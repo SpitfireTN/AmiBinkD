@@ -64,16 +64,40 @@ static void serv (void *arg)
 #if defined(WITH_PERL) && defined(HAVE_THREADS)
   cperl = perl_init_clone(config);
 #endif
+#ifdef AMIGA
+  fprintf(stderr, "SERV: calling protocol()\n"); fflush(stderr);
+#endif
   protocol (h, h, NULL, NULL, NULL, NULL, NULL, config);
+#ifdef AMIGA
+  fprintf(stderr, "SERV: protocol() returned\n"); fflush(stderr);
+#endif
   Log (5, "downing server...");
 #if defined(WITH_PERL) && defined(HAVE_THREADS)
   perl_done_clone(cperl);
 #endif
+#ifdef AMIGA
+  fprintf(stderr, "SERV: calling del_socket\n"); fflush(stderr);
+#endif
   del_socket(h);
+#ifdef AMIGA
+  fprintf(stderr, "SERV: calling soclose\n"); fflush(stderr);
+#endif
   soclose (h);
+#ifdef AMIGA
+  fprintf(stderr, "SERV: calling free(arg)\n"); fflush(stderr);
+#endif
   free (arg);
+#ifdef AMIGA
+  fprintf(stderr, "SERV: calling unlock_config_structure\n"); fflush(stderr);
+#endif
   unlock_config_structure(config, 0);
+#ifdef AMIGA
+  fprintf(stderr, "SERV: calling rel_grow_handles\n"); fflush(stderr);
+#endif
   rel_grow_handles (-6);
+#ifdef AMIGA
+  fprintf(stderr, "SERV: serv() finished, returning\n"); fflush(stderr);
+#endif
 #ifdef HAVE_THREADS
   threadsafe(--n_servers);
   PostSem(&eothread);
@@ -186,7 +210,13 @@ static int do_server(BINKD_CONFIG *config)
     tv.tv_sec  = CHECKCFG_INTERVAL;
     unblocksig();
     check_child(&n_servers);
+#ifdef AMIGA
+    fprintf(stderr, "DO_SERVER: top of loop, calling select() tv_sec=%ld\n", (long)tv.tv_sec); fflush(stderr);
+#endif
     n = select(maxfd+1, &r, NULL, NULL, &tv);
+#ifdef AMIGA
+    fprintf(stderr, "DO_SERVER: select() returned %d\n", n); fflush(stderr);
+#endif
     blocksig();
     switch (n)
     { case 0: /* timeout */
