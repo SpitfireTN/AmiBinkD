@@ -21,13 +21,18 @@
 
 #include "iphdr.h"
 
-/* Autosense getaddrinfo */
-#if defined(AI_PASSIVE) && defined(EAI_NONAME)
+/* Autosense getaddrinfo. Excluded on AMIGA: this toolchain's netdb.h
+ * defines AI_PASSIVE/EAI_NONAME (enough to fool the autosense) but
+ * Amiberry's bsdsocket_emu doesn't reliably implement the real
+ * getaddrinfo()/getnameinfo() vectors those constants imply - confirmed
+ * via a real crash (see iphdr.h). Force the self-contained emulation
+ * below instead, built on much older/universal primitives. */
+#if defined(AI_PASSIVE) && defined(EAI_NONAME) && !defined(AMIGA)
 #define HAVE_GETADDRINFO
 #endif
 
-/* Autosense getnameinfo */
-#if defined(NI_NUMERICHOST)
+/* Autosense getnameinfo (same AMIGA exclusion as above) */
+#if defined(NI_NUMERICHOST) && !defined(AMIGA)
 #define HAVE_GETNAMEINFO
 #endif
 

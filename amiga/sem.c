@@ -2,6 +2,7 @@
  *  Amiga semaphores
  */
 #include <exec/exec.h>
+#include <dos/dos.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <string.h>
@@ -9,6 +10,11 @@
 #include "../sem.h"
 
 extern void Log (int lev, char *s,...);
+/* Declared directly rather than pulling in common.h here (this file
+ * doesn't follow the usual sys.h-must-come-first include order the rest
+ * of the codebase needs) - it's the same "int binkd_exit;" defined in
+ * exitproc.c and checked throughout client.c/server.c/protocol.c/etc. */
+extern int binkd_exit;
 
 /* ~1 second of Delay() ticks (50Hz PAL/NTSC vblank rate - close enough
  * for a mailer's polling granularity). */
@@ -61,7 +67,12 @@ int _PostSem(void *vpSem) {
   return 0;
 }
 
-/* Returns 0 if posted (and consumes the post), -1 on timeout.
+/* Returns 0 if posted (and consumes the post), -1 on timeout or on
+ * CTRL_C (binkd_exit is set in the latter case - same contract as
+ * amiga_glue.c's select() wrapper, so callers using SLEEP()/WaitSem()
+ * for a poll/rescan delay notice a break the same way they'd notice one
+ * during a blocking select(), instead of only being interruptible while
+ * actually waiting on network I/O).
  * sec <= 0 means "check once, don't block". */
 int _WaitSem(void *vpSem, int sec) {
   EVENTSEM *e = (EVENTSEM *)vpSem;
@@ -75,6 +86,12 @@ int _WaitSem(void *vpSem, int sec) {
       return 0;
     }
     ReleaseSemaphore(&e->sem);
+
+    if (CheckSignal(SIGBREAKF_CTRL_C))
+    {
+      binkd_exit = 1;
+      return -1;
+    }
 
     if (sec <= 0 || elapsed >= sec)
       return -1;

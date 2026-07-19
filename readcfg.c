@@ -697,10 +697,18 @@ static int readcfg0 (char *path)
   if ((in = fopen (path, "r")) == 0)
     return ConfigError("cannot open %s: %s", path, strerror(errno));
 
+#ifdef AMIGA
+  fprintf(stderr, "READCFG: opened %s OK\n", path); fflush(stderr);
+#endif
+
   current_line = 0;
   current_path = path;
 
   add_to_config_list (path, in);
+
+#ifdef AMIGA
+  fprintf(stderr, "READCFG: add_to_config_list done, entering parse loop\n"); fflush(stderr);
+#endif
 
   for (success = 1; success && fgets (linebuf, sizeof (linebuf), in); )
   {
@@ -725,7 +733,17 @@ static int readcfg0 (char *path)
         if (!STRICMP (k->key, words[0]))
           break;
       if (k->key)
+      {
+#ifdef AMIGA
+        fprintf(stderr, "READCFG line %d: keyword '%s' (%d args)\n", current_line, k->key, wordcount - 1);
+        fflush(stderr);
+#endif
         success = k->callback(k, wordcount-1, words+1);
+#ifdef AMIGA
+        fprintf(stderr, "READCFG line %d: keyword '%s' returned %d\n", current_line, k->key, success);
+        fflush(stderr);
+#endif
+      }
       else
         success = ConfigError("%s: unknown keyword", words[0]);
     }

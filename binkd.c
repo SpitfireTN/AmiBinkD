@@ -462,6 +462,9 @@ int main (int argc, char *argv[])
 #endif
 {
   char tmp[128];
+#ifdef AMIGA
+  fprintf(stderr, "CHECKPOINT 1: main() entered\n"); fflush(stderr);
+#endif
 #if defined(HAVE_FORK)
   char **saved_argv;
 
@@ -476,11 +479,21 @@ int main (int argc, char *argv[])
    * identifier for logging (PID() macro / md5b.c's challenge nonce),
    * not used for any real process management here. */
   mypid = (int)(long)FindTask(NULL);
+  fprintf(stderr, "CHECKPOINT 2: mypid set\n"); fflush(stderr);
 #endif
   configpath = parseargs(argc, argv);
+#ifdef AMIGA
+  fprintf(stderr, "CHECKPOINT 3: parseargs done, configpath=%s\n", configpath ? configpath : "(null)"); fflush(stderr);
+#endif
 #endif
 
+#ifdef AMIGA
+  /* saved_envp is never actually read anywhere in this codebase - not
+   * worth resolving whether libnix's environ/environ_ptr macro is
+   * reliably populated at this point when it accomplishes nothing. */
+#else
   saved_envp = mkargv (-1, environ);
+#endif
 
 #ifdef WIN32
   if (service_flag==w32_installservice && !configpath)
@@ -520,6 +533,9 @@ int main (int argc, char *argv[])
   if (!client_flag && !server_flag)
     client_flag = server_flag = 1;
 
+#ifdef AMIGA
+  fprintf(stderr, "CHECKPOINT 4: before InitSem\n"); fflush(stderr);
+#endif
   InitSem (&hostsem);
   InitSem (&resolvsem);
   InitSem (&lsem);
@@ -531,17 +547,32 @@ int main (int argc, char *argv[])
 #ifdef OS2
   InitSem (&fhsem);
 #endif
+#ifdef AMIGA
+  fprintf(stderr, "CHECKPOINT 5: sems initialized\n"); fflush(stderr);
+#endif
 
   /* Init for ftnnode.c */
   nodes_init ();
+#ifdef AMIGA
+  fprintf(stderr, "CHECKPOINT 6: nodes_init done\n"); fflush(stderr);
+#endif
 
   /* Needed for getaddrinfo() in find_port() */
   if (sock_init ())
     Log (0, "sock_init: %s", TCPERR ());
+#ifdef AMIGA
+  fprintf(stderr, "CHECKPOINT 7: sock_init done\n"); fflush(stderr);
+#endif
 
   if (configpath)
   {
+#ifdef AMIGA
+    fprintf(stderr, "CHECKPOINT 8: calling readcfg(%s)\n", configpath); fflush(stderr);
+#endif
     current_config = readcfg (configpath);
+#ifdef AMIGA
+    fprintf(stderr, "CHECKPOINT 9: readcfg returned %p\n", (void*)current_config); fflush(stderr);
+#endif
     if (!current_config)
       Log (0, "error in configuration, aborting");
     if (dumpcfg_flag)

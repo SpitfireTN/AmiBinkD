@@ -121,15 +121,36 @@ void ReleaseErrorList(void);
   #include <errno.h>
   #include <netinet/in.h>
   #include "amiga_glue.h"
-  /* This toolchain's netdb.h/inline/bsdsocket.h provide a real, working
-   * getaddrinfo()/getnameinfo() (native bsdsocket.library calls) - see
-   * rfc2553.h's autosense - but never define struct sockaddr_storage,
-   * since there's no real IPv6 support to size it for. Alias it to
-   * sockaddr_in, same as rfc2553.h's own no-getaddrinfo fallback does
-   * for other platforms; nothing here does real IPv6 addressing anyway. */
-  #ifndef HAVE_SOCKADDR_STORAGE
-  #define HAVE_SOCKADDR_STORAGE
-  #define sockaddr_storage sockaddr_in
+  /* This toolchain's netdb.h/inline/bsdsocket.h declare a real
+   * getaddrinfo()/getnameinfo() (bsdsocket.library vector calls) that
+   * compiles fine and LOOKS like a real Roadshow install - but Amiberry's
+   * bsdsocket_emu is its own lightweight reimplementation, not real
+   * Roadshow, and there's no guarantee it actually implements that
+   * specific (fairly advanced) vector. Confirmed the hard way: the very
+   * first real getaddrinfo() call (find_port() -> lock_config_structure(),
+   * called before the config file is even opened) crashed with a wild
+   * jump (Guru 8000000B) on real Amiberry, despite compiling and linking
+   * cleanly. Undefine bsdsocket.library's own inline-asm macros for these
+   * so rfc2553.h's forced-on-AMIGA emulation (built on much older,
+   * universally-implemented primitives like gethostbyname()) is what
+   * actually gets called everywhere in this codebase instead - see the
+   * AMIGA exclusion added to rfc2553.h's autosense. */
+  #undef getaddrinfo
+  #undef freeaddrinfo
+  #undef getnameinfo
+  #undef gai_strerror
+  /* rfc2553.h's own EAI_ and NI_ constant blocks are each guarded by a
+   * single ifndef (EAI_NONAME / NI_NUMERICHOST) on the assumption that
+   * if one exists they all do - true on real POSIX netdb.h, false here:
+   * this toolchain's netdb.h defines most of the set (under netdb.h's
+   * own numbering, which differs from rfc2553.h's) but not these two
+   * rfc2553.c itself still references. Add them directly rather than
+   * touch rfc2553.h's or rfc2553.c's own logic. */
+  #ifndef EAI_UNKNOWN
+  #define EAI_UNKNOWN -11
+  #endif
+  #ifndef NI_DATAGRAM
+  #define NI_DATAGRAM (1<<4)
   #endif
   #define ReleaseErrorList()
   #define TCPERR() strerror(errno)

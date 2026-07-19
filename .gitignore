@@ -2,3 +2,4 @@
 *.o
 amiga/*.o
 amibinkd
+amiberry-test-stdout.log
