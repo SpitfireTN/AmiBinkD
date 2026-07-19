@@ -87,7 +87,11 @@ int _WaitSem(void *vpSem, int sec) {
     }
     ReleaseSemaphore(&e->sem);
 
-    if (CheckSignal(SIGBREAKF_CTRL_C))
+    /* SetSignal(0, mask) atomically clears the bits and returns what they
+     * were beforehand - used to check (not set) CTRL_C. Avoids
+     * CheckSignal(): this toolchain's <proto/dos.h> resolves to an older
+     * ndk13-include variant that doesn't declare it at all. */
+    if (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)
     {
       binkd_exit = 1;
       return -1;
