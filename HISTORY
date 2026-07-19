@@ -1,0 +1,2982 @@
+2022/07/02 13:06:13 1.1a-115 git
+run.c,2.16,2.17
+Set correct command line interpreter for Windows in fail situation
+Signed-off-by: vasilyevmax <35378045+vasilyevmax@users.noreply.github.com>
+
+2022/07/01 10:11:12 git
+binkdfaq-en.txt,2.8,2.9 binkdfaq-ru.txt,2.8,2.9
+update Max Vasilyev's site address
+
+2022/06/25 08:55:47 1.1a-114 git
+binkd.cfg,2.64,2.65 binkd.conf,1.9,1.10 ftnq.c,2.45,2.46 ftnq.h,2.12,2.13 readcfg.c,2.117,2.118 readcfg.h,2.45,2.46
+Remove .try files after successful session
+
+2022/05/19 20:31:12 git
+binkd.cfg,2.63,2.64 binkd.conf,1.8,1.9
+The -64 and -46 options and their descriptions have been added to the config.
+
+2022/02/11 21:27:12 git
+nodelist.pl,1.4,1.5
+Fix some warnings in misc/nodelist.pl
+
+2021/11/14 11:17:45 1.1a-113 git
+protocol.c,2.238,2.239
+Fix format in log and M_ERR messages
+
+2021/07/08 10:01:11 git
+Makefile.in,2.25,2.26 binkd.spec,1.214,1.215
+fix binkd.spec and add a doc package with config and FAQ
+
+2021/01/19 11:07:20 1.1a-112 git
+breaksig.c,2.26,2.27
+Graceful exit when idle for Windows builds, for Nick Andre.
+Set the binkd_exit flag to TRUE when signaled to exit and return TRUE
+(indicating that the signal was handled by the process) thus mimicking the
+behavior of the *nix builds' handling of termination signals.
+
+2021/01/19 11:07:11 git
+Makefile,2.55,2.56
+Define HAS_SNPRINTF for modern MSVC build compatibility (e.g. MSVC2019)
+Fix build error using "nmake MSVC_VER=10" and MSVC2019:
+
+Linking binkd.exe...
+snprintf.obj : error LNK2005: _snprintf already defined in readcfg.obj
+bin\msvc10-binkd\binkd.exe : fatal error LNK1169: one or more multiply defined symbols found
+
+2020/05/26 20:48:08 1.1a-111 git
+binkd.c,2.127,2.128
+Print "Facilities" without space at the end of line. Make sense for further "binkd.exe -vv>file_id.diz" processing. (#21)
+
+2020/05/25 14:12:23 git
+configure,2.57,2.58 configure.in,2.57,2.58
+Fix check perl multiplicity in configure
+
+2020/05/25 08:48:41 1.1a-110 git
+readcfg.c,2.116,2.117
+Revert 4a528544 (perl multiplicity)
+
+2020/05/17 23:32:09 1.1a-109 git
+binkd.c,2.126,2.127 perlhooks.c,2.95,2.96 perlhooks.h,2.18,2.19 readcfg.c,2.115,2.116
+Call PERL_SYS_INIT3() only once
+
+2020/05/17 20:52:52 1.1a-108 git
+exitproc.c,2.48,2.49
+tab to spaces
+
+2020/05/17 20:52:14 1.1a-107 git
+readcfg.c,2.114,2.115
+Require PERL_MULTIPLICITY for run multiple perl interpreters
+
+2020/05/17 20:52:07 1.1a-106 git
+perlhooks.c,2.94,2.95
+Set PL_perl_destruct_level to 1 for correct restart perl interpreter
+Signed-off-by: Pavel Gulchuk <gul@gul.kiev.ua>
+
+2020/05/17 20:11:12 1.1a-105 git
+perlhooks.c,2.93,2.94
+Fix init perlsem
+
+2020/04/30 21:30:12 git
+Makefile,1.1,1.2
+[DOS] fix making directory tree for DOS build
+
+2020/04/29 09:03:10 1.1a-104 git
+ftnnode.c,2.51,2.52 ftnq.c,2.44,2.45 protocol.c,2.237,2.238
+Silence warnings: remove superfluous nullity checks
+struct `FTN_NODE` defined in `btypes.h` contains
+the member `pwd`, which is a character array.
+Several places in the code, this array was checked
+for nullity; however, this was always done in a place
+where the validity of the referring `FTN_NODE` struct
+pointer had already been established, and as `pwd` is
+an array (and not a generic pointer) it can never be
+NULL.  These superflous checks caused warnings when
+compiling under `clang`.
+
+This change removes those checks to silence these warnings.
+
+Additionally, at those call sites often the code called
+`strcmp` to compare `p->pwd` against some other string,
+invariably inside of a conditional.  Modify the
+conditionals to always explicity compare the value
+returned from `strcmp` against e.g. 0.
+
+Signed-off-by: Dan Cross <cross@fat-dragon.org>
+
+2020/04/25 15:53:52 git
+Makefile,2.28,2.29 Makefile.emo,1.11,1.12 Makefile.klibc,1.6,1.7
+[OS/2] change .EXE naming scheme and library definitions
+
+2020/04/25 15:53:47 1.1a-103 git
+ftnq.c,2.43,2.44 run.c,2.15,2.16 sys.h,2.47,2.48
+compile Binkd for DOS with djgpp 2.05 and watt32 library
+
+2020/04/25 15:53:17 git
+Makefile,NONE,1.1
+compile Binkd for DOS with djgpp 2.05 and watt32 library
+
+2020/04/25 15:53:10 1.1a-102 git
+client.c,2.110,2.111
+Fix build for OS/2 and Windows 9x on ancient compilers
+Original patch by Dan Cross,
+additional testing and improvements by Max Vasilyev
+Neither Win9x nor OS/2 define `struct sockaddr_storage`.
+To work around this, we resort to casts to make the
+`ss_family` member of that struct look like the `sa_family`
+member in a `struct sockaddr`.  According to POSIX, all
+of these structs should be defined in such a way that
+this will work without surprises.
+
+2020/04/05 20:33:09 git
+README.md,2.2,2.3
+Update README.md
+Fixed incorrect instructions and beautified the steps into a tested and verified cookbook style Howto.
+
+2020/01/30 10:21:49 1.1a-101 git
+client.c,2.109,2.110
+Fix an out-of-bounds error on sockaddrs.
+The `invalidAddresses` vector in `client.c` is used
+to hold invalid addresses `binkd` should not use.
+However, the array was of type `struct sockaddr`,
+which is not large enough to hold all of the
+protocol-specific data of the `struct sockaddr_*`
+structures.  As a result, `binkd` would access
+out-of-bounds memory when examining elements of
+the array.
+
+Fixed by redefining `invalidAddresses` to be an
+array of type `struct sockaddr_storage`, which is
+guaranteed by POSIX to be large enough to hold all
+data associated with a socket address for any
+protocol family.
+
+Signed-off-by: Dan Cross <cross@fat-dragon.org>
+
+2020/01/30 10:21:13 1.1a-100 git
+client.c,2.108,2.109 ftnnode.c,2.50,2.51 iphdr.h,2.28,2.29 protocol.c,2.236,2.237 readcfg.c,2.113,2.114 readcfg.h,2.44,2.45
+Fix use-after-free bug in get_host_and_port.
+Don't use pointer assignment in this function,
+but rather, copy into a fixed-length buffer.
+
+Fixes #15
+
+Signed-off-by: Dan Cross <cross@fat-dragon.org>
+
+2019/01/23 09:16:18 git
+binkdfaq-en.txt,2.7,2.8 binkdfaq-ru.txt,2.7,2.8
+add a question on non-ASCII domains
+
+2018/05/14 22:32:57 git
+configure,2.56,2.57 configure.in,2.56,2.57
+Updated autoconf scripts
+
+2018/05/14 22:32:47 1.1a-99 git
+readcfg.c,2.112,2.113
+Added missing ifdef in readcfg
+
+2018/05/14 22:32:38 1.1a-98 git
+client.c,2.107,2.108
+Added breaks to AFF for loops
+
+2018/05/14 22:32:27 git
+.ggg.swp,2.1,NONE
+Soft AF force code added
+
+2018/05/14 22:32:19 1.1a-97 git
+.ggg.swp,NONE,2.1 btypes.h,2.14,2.15 client.c,2.106,2.107 ftnnode.c,2.49,2.50 ftnnode.h,2.25,2.26 readcfg.c,2.111,2.112
+Soft AF force code added
+
+2017/12/16 12:33:14 git
+binkdfaq-en.txt,2.6,2.7 binkdfaq-ru.txt,2.6,2.7
+A reference to a node that no longer exists in the nodelist was deleted
+
+2017/12/15 19:40:18 git
+binkdfaq-en.txt,2.5,2.6
+The URL for protocol description was fixed
+
+2017/12/10 10:33:17 1.1a-96 git
+perlhooks.c,2.92,2.93
+Compatibility with perl 5.26
+
+2017/12/02 17:21:45 git
+binkdfaq-en.txt,2.4,2.5 binkdfaq-ru.txt,2.5,2.6
+Dead web links were deleted
+
+2016/11/27 08:38:18 1.1a-95 git
+tools.c,2.82,2.83
+Fixed compilation warnings
+
+2016/03/28 18:29:09 1.1a-94 git
+perlhooks.c,2.91,2.92
+Fixed "Modification of a read-only value attempted" error
+
+2016/03/28 18:08:43 1.1a-93 git
+perlhooks.c,2.90,2.91
+Fixed "Modification of a read-only value attempted" error
+
+2016/01/27 23:31:08 1.1a-92 git
+server.c,2.65,2.66
+Safe servmgr shudown on error
+
+2016/01/27 21:40:15 1.1a-91 git
+sem.c,1.3,1.4
+Fixed timeout on wait unix semaphore
+
+2016/01/27 21:23:45 1.1a-90 git
+binkd.c,2.125,2.126 client.c,2.105,2.106 rfc2553.c,2.7,2.8 rfc2553.h,2.4,2.5
+Fixed SIGHUP handler in unix pthread version
+
+2016/01/25 16:56:09 git
+Makefile.in,2.24,2.25
+add option -s 'strip symbol tables' to 'make install' in unix Makefile(.in)
+
+2016/01/25 09:47:40 git
+Makefile.dep,2.16,2.17
+Removed delay on exit multithread client-only by signal
+
+2016/01/25 09:47:39 git
+Makefile.dep,2.29,2.30
+Removed delay on exit multithread client-only by signal
+
+2016/01/25 09:34:15 1.1a-89 git
+client.c,2.104,2.105
+Fixed exit by signal on multithread clientonly mode
+
+2016/01/24 23:32:38 1.1a-88 git
+binkd.c,2.124,2.125 breaksig.c,2.8,2.9 common.h,2.18,2.19
+Signal handling in pthread version on FreeBSD
+
+2016/01/24 23:00:48 1.1a-87 git
+perlhooks.c,2.89,2.90
+Fixed segfault after session without perl hooks
+
+2016/01/24 22:54:12 1.1a-86 git
+binkd.c,2.123,2.124 breaksig.c,2.7,2.8 server.c,2.64,2.65 server.h,2.7,2.8
+Servmgr returned to main thread
+But signal handler does not call exit(), just set binkd_exit flag
+
+2016/01/24 13:37:09 1.1a-85 git
+server.c,2.63,2.64 server.h,2.6,2.7
+Fixed warning on multithread version
+
+2016/01/24 13:33:08 1.1a-84 git
+binkd.c,2.122,2.123 exitproc.c,2.47,2.48
+Run servmgr as non-main thread on multithread version
+
+2016/01/24 13:27:10 git
+configure,2.55,2.56 configure.in,2.55,2.56
+Fixed gettid syscall detection in configure
+
+2016/01/24 12:28:41 git
+configure,2.54,2.55 configure.in,2.54,2.55
+gettid syscall exists but not working on Max OS X
+
+2016/01/24 12:28:08 1.1a-83 git
+sem.c,1.2,1.3
+pthread version without clock_gettime() - Mac OS X
+
+2016/01/24 11:54:14 1.1a-82 git
+branch.c,2.17,2.18 md5b.c,2.13,2.14 sys.h,2.46,2.47
+Fixed warnings for unix multithread version
+
+2016/01/20 16:52:07 1.1a-81 git
+client.c,2.103,2.104
+Removed the memset. static variables are guaranteed to be initialized to 0, even by older compilers.
+
+2016/01/20 16:51:28 1.1a-80 git
+client.c,2.102,2.103
+Made the file "global" var static. This should make the var auto initialized to 0 for C99 compatible compilers. But left in the memset just in case.
+Expanded tab characters in client.c
+
+2016/01/20 16:51:24 1.1a-79 git
+client.c,2.101,2.102
+Code of previous commit tested and fixed.
+
+2016/01/20 16:50:19 1.1a-78 git
+client.c,2.100,2.101
+Initialization warning fixed
+
+2016/01/19 15:22:22 1.1a-77 git
+client.c,2.99,2.100
+Check for "illegal" IP nrs 0.0.0.0 and [::] before trying to make a connection
+Using an array for the addresses and initializing outside of branch code.
+
+2016/01/19 15:22:15 1.1a-76 git
+.gitignore,NONE,2.1 client.c,2.98,2.99
+Check for "illegal" IP nrs 0.0.0.0 and [::] before trying to make a connection
+
+2015/10/09 20:54:11 1.1a-75 git
+perlhooks.c,2.88,2.89
+Typo in perlhooks function call
+Signed-off-by: Pavel Gulchuk <gul@gul.kiev.ua>
+
+2015/10/09 12:12:41 1.1a-74 git
+perlhooks.c,2.87,2.88
+Fixed error "attempt to change r/o variable" on perl 5.20
+Signed-off-by: Pavel Gulchuk <gul@gul.kiev.ua>
+
+2015/09/15 22:47:08 dukelsky
+howto-en.texi,1.3,1.4 howto-ru.texi,1.5,1.6
+Email addresses had incorrect syntax
+
+2015/07/03 17:30:22 dukelsky
+binkd.cfg,2.62,2.63 binkd.conf,1.7,1.8
+FIX: English usage
+
+2015/06/25 16:37:05 dukelsky
+binkdfaq-en.txt,2.3,2.4 binkdfaq-ru.txt,2.4,2.5
+URLs for VIREQ/x binaries. Thanks to Max Vasilyev 2:5057/77
+
+2015/06/18 09:42:10 1.1a-73 git
+client.c,2.97,2.98
+Improve logging
+
+2015/06/07 22:52:10 1.1a-72 gul
+rename.c,2.1,2.2
+More clean non-destructive rename() on unix
+
+2015/04/27 19:15:52 gul
+binkd9x-en.txt,2.2,2.3
+replace “см.” with “see” in `binkd9x-en.txt`
+
+2015/04/27 19:13:54 gul
+binkd9x-en.txt,2.1,2.2 binkd9x-ru.txt,2.1,2.2 binkdfaq-ru.txt,2.3,2.4
+Convert documentation to UTF-8
+Previously it was a mess of CP866, KOI8-R, and Windows-1251.
+
+2015/04/27 19:13:24 gul
+binkd-ug-ru.htm,1.19,1.20 binkp10-en.txt,1.1,1.2 binkp10-ru.txt,1.1,1.2 binkp11-en.txt,1.1,1.2 binkp11-ru.txt,1.1,1.2 binkplic-ru.html,1.1,1.2 howto-en.texi,1.2,1.3 howto-ru.texi,1.4,1.5 nd-mode-ru.txt,1.1,1.2
+Convert documentation to UTF-8
+Previously it was a mess of CP866, KOI8-R, and Windows-1251.
+
+2015/04/10 23:01:50 gul
+README.md,2.1,2.2
+rewrite `README.md` using GitHub Flavored Markdown
+
+2015/04/10 23:01:12 gul
+README.md,NONE,2.1 README,2.2,NONE
+rename `README` to `README.md` (implying GitHub Flavored Markdown)
+
+2015/04/08 20:10:51 1.1a-71 gul
+Config.h,2.715,2.716 assert.h,2.0,2.1 binkd.c,2.121,2.122 binlog.c,2.14,2.15 binlog.h,2.3,2.4 branch.c,2.16,2.17 breaksig.c,2.6,2.7 bsy.c,2.13,2.14 bsy.h,2.2,2.3 btypes.h,2.13,2.14 client.c,2.96,2.97 client.h,2.0,2.1 common.h,2.17,2.18 compress.c,2.5,2.6 compress.h,2.3,2.4 confopt.h,2.11,2.12 crypt.c,2.4,2.5 crypt.h,2.5,2.6 exitproc.c,2.46,2.47 ftnaddr.c,2.12,2.13 ftnaddr.h,2.7,2.8 ftndom.c,2.8,2.9 ftndom.h,2.6,2.7 ftnnode.c,2.48,2.49 ftnnode.h,2.24,2.25 ftnq.c,2.42,2.43 ftnq.h,2.11,2.12 getw.c,2.10,2.11 getw.h,2.2,2.3 https.c,2.29,2.30 https.h,2.5,2.6 inbound.c,2.52,2.53 inbound.h,2.10,2.11 iphdr.h,2.27,2.28 iptools.c,2.21,2.22 iptools.h,2.9,2.10 md5b.c,2.12,2.13 md5b.h,2.6,2.7 perlhooks.c,2.86,2.87 perlhooks.h,2.17,2.18 prothlp.c,2.11,2.12 prothlp.h,2.6,2.7 protoco2.h,2.33,2.34 protocol.c,2.235,2.236 protocol.h,2.5,2.6 readcfg.c,2.110,2.111 readcfg.h,2.43,2.44 readdir.h,2.6,2.7 readflo.c,2.6,2.7 readflo.h,2.4,2.5 rfc2553.c,2.6,2.7 rfc2553.h,2.3,2.4 run.c,2.14,2.15 run.h,2.3,2.4 sem.h,2.15,2.16 server.c,2.62,2.63 server.h,2.5,2.6 setpttl.h,2.0,2.1 srif.c,2.23,2.24 srif.h,2.6,2.7 srv_gai.c,2.8,2.9 srv_gai.h,2.4,2.5 sys.h,2.45,2.46 tools.c,2.81,2.82 tools.h,2.30,2.31 xalloc.c,2.6,2.7 zlibdl.c,2.15,2.16 zlibdl.h,2.19,2.20daemonize.c,2.8,2.9 daemonize.h,2.1,2.2 getfree.c,2.1,2.2 rename.c,2.0,2.1 sem.c,1.1,1.2 setpttl.c,2.3,2.4
+CVS macros '$Log' and partially '$Id' removed from source code
+
+2015/04/08 16:26:20 gul 1.1a-70 gul
+binkd9x-en.txt,NONE,2.1 binkd9x-ru.txt,NONE,2.1 binkdfaq-en.txt,NONE,2.1 binkdfaq-ru.txt,NONE,2.1 release-notes.txt,NONE,2.1 !README.FIX,2.63,NONE !README.perl,2.17,NONE !SRIF.TXT,2.0,NONE binkd9x.txt,2.14,NONE binkd9x.txt.en,1.1,NONE binkdfaq.txt.en,1.77,NONE binkdfaq.txt.ru,1.100,NONE readme.ND,2.1,NONE
+Documentation files renamed
+
+2015/01/14 09:42:29 1.1a-69 gul
+protocol.c,2.234,2.235
+Improve logging
+
+2014/12/14 19:48:21 1.1a-68 gul
+client.c,2.95,2.96 https.c,2.28,2.29 https.h,2.4,2.5
+Fixed outgoing connects via proxy
+
+2014/12/12 08:27:41 1.1a-67 gul
+readcfg.c,2.109,2.110
+Fixed iport/oport output in dumpcfg mode
+
+2014/12/12 07:41:57 1.1a-66 gul
+binkd.c,2.120,2.121 srv_gai.h,2.3,2.4
+Compilation flag FSP1035 renamed to FTS5004
+
+2014/09/21 14:59:39 1.1a-65 gul
+binkd.c,2.119,2.120
+Fixed broken iport/oport in config on win32
+
+2014/09/21 11:44:53 1.1a-64 gul
+binkd.c,2.118,2.119 client.c,2.94,2.95 protocol.c,2.233,2.234 protocol.h,2.4,2.5 server.c,2.61,2.62
+Write configured remote hostname and port in log line "outgoing session with ..."
+
+2014/08/19 09:41:39 1.1a-63 gul
+ns_parse.h,1.3,1.4
+OS/2 compilation
+
+2014/08/18 19:57:57 1.1a-62 gul
+ns_parse.h,1.2,1.3
+Fixed OS/2 compilation
+
+2014/08/18 07:49:04 1.1a-61 gul
+sys.h,2.44,2.45
+Fix MSVC + IPV6
+
+2014/08/18 07:32:21 1.1a-60 gul
+win9x.c,2.29,2.30
+Fixed binkd9x compilation
+
+2014/08/14 10:37:22 1.1a-59 gul
+client.c,2.93,2.94
+Fix 100% cpu load when called with "-p" option
+
+2014/08/14 09:42:34 1.1a-58 gul
+rfc2553.h,2.2,2.3 srv_gai.c,2.7,2.8 srv_gai.h,2.2,2.3
+Fixed compilation on unix
+
+2014/08/14 09:42:05 1.1a-57 gul
+ns_parse.c,1.2,1.3
+Fixed compilation on unix
+
+2014/08/13 23:51:26 1.1a-56 gul
+binkd.c,2.117,2.118 iphdr.h,2.26,2.27 iptools.c,2.20,2.21 md5b.c,2.11,2.12 run.c,2.13,2.14 server.c,2.60,2.61 srv_gai.c,2.6,2.7 sys.h,2.43,2.44 tools.c,2.80,2.81
+Fixed IPv6 support with MSVC build
+
+2014/08/13 23:50:57 1.1a-55 gul
+TCPErr.c,2.16,2.17 WSock.c,2.4,2.5 breaksig.c,2.24,2.25 getfree.c,2.12,2.13 sem.c,2.9,2.10 service.c,2.58,2.59 tray.c,2.13,2.14 w32tools.c,2.20,2.21 win9x.c,2.28,2.29
+Fixed IPv6 support with MSVC build
+
+2014/08/09 20:08:10 1.1a-54 gul
+https.c,2.27,2.28
+Fixed outbount port number when using socks4
+
+2014/08/09 16:58:05 1.1a-53 gul
+server.c,2.59,2.60
+Fix servmgr exit after incoming session (broken in 1.1a-50)
+
+2014/08/04 00:02:00 1.1a-52 gul
+client.c,2.92,2.93
+More clean sleep in some rare OS
+
+2014/08/03 23:58:59 1.1a-51 gul
+client.c,2.91,2.92
+Fix in previous patch (typo, clientmgr was broken)
+
+2014/08/02 12:54:06 1.1a-50 gul
+client.c,2.90,2.91 common.h,2.16,2.17 server.c,2.58,2.59
+Fix in signal handling
+
+2014/02/02 09:46:49 1.1a-49 gul
+server.c,2.57,2.58
+Set FD_CLOEXEC on listening socket
+
+2014/02/02 09:12:34 1.1a-48 gul
+inbound.c,2.51,2.52
+Fix generate unique name for inbound file (broken in 1.1a-24)
+
+2014/01/14 10:20:12 1.1a-47 gul
+protocol.c,2.232,2.233 todo.lst,2.52,2.53
+Possible segfault on some systems in rare case
+
+2014/01/13 15:42:29 1.1a-46 gul
+branch.c,2.15,2.16
+pthread creating error handling, detach created threads
+
+2014/01/13 14:33:41 1.1a-45 gul
+branch.c,2.14,2.15 sys.h,2.42,2.43
+configure and small changes for multithread unix version
+
+2014/01/13 14:33:13 1.1a-44 gul
+sem.c,NONE,1.1
+configure and small changes for multithread unix version
+
+2014/01/13 12:33:21 1.1a-43 gul
+binkd.c,2.116,2.117 branch.c,2.13,2.14 sys.h,2.41,2.42
+Unix multithread version
+
+2014/01/12 15:26:03 1.1a-42 gul
+Config.h,2.686,2.687 binkd.c,2.115,2.116 branch.c,2.12,2.13 breaksig.c,2.5,2.6 client.c,2.89,2.90 exitproc.c,2.45,2.46 ftnnode.c,2.47,2.48 perlhooks.c,2.85,2.86 protocol.c,2.231,2.232 sem.h,2.14,2.15 server.c,2.56,2.57 sys.h,2.40,2.41
+unix (linux) pthread version
+
+2014/01/06 15:53:19 1.1a-41 gul
+inbound.c,2.50,2.51
+Change inbound file mode 0755 to 0666
+
+2013/12/11 15:06:15 1.1a-40 stas
+run.c,2.12,2.13
+Fix warning "missing sentinel in function call"
+
+2013/11/25 21:49:54 1.1a-39 stream
+ftnq.c,2.41,2.42
+Fix possibly uninitialized variable: A node could be held to random time if it was an error during processing of .hld file
+
+2013/11/25 21:46:05 1.1a-38 stream
+daemonize.c,2.7,2.8
+Add include (last one, I hope)/Fix UNIX build
+
+2013/11/18 08:49:31 1.1a-37 stream
+compress.c,2.4,2.5
+Add required include
+
+2013/11/15 14:00:43 1.1a-36 stream
+sys.h,2.39,2.40
+Fix EMX build
+
+2013/11/08 20:22:34 1.1a-35 stream
+sys.h,2.38,2.39
+Build on MSVC 2000
+
+2013/11/08 14:02:48 1.1a-34 stream
+branch.c,2.11,2.12 perlhooks.c,2.84,2.85
+Fix order of dependent includes
+
+2013/11/08 14:02:18 1.1a-33 stream
+sem.c,2.5,2.6
+Fix order of dependent includes
+
+2013/11/07 18:22:05 1.1a-32 stream
+binkd.c,2.114,2.115 binlog.c,2.13,2.14 bsy.c,2.12,2.13 btypes.h,2.12,2.13 client.c,2.88,2.89 exitproc.c,2.44,2.45 ftnaddr.c,2.11,2.12 ftndom.c,2.7,2.8 ftnnode.c,2.46,2.47 ftnq.c,2.40,2.41 getw.c,2.9,2.10 https.c,2.26,2.27 inbound.c,2.49,2.50 inbound.h,2.9,2.10 perlhooks.c,2.83,2.84 perlhooks.h,2.16,2.17 prothlp.c,2.10,2.11 prothlp.h,2.5,2.6 protoco2.h,2.32,2.33 protocol.c,2.230,2.231 readcfg.c,2.108,2.109 readcfg.h,2.42,2.43 readflo.c,2.5,2.6 srif.c,2.22,2.23 sys.h,2.37,2.38 tools.c,2.79,2.80 xalloc.c,2.5,2.6
+Lot of fixes to support 2G+ files. Supports 2G+ on Windows/MSVC
+
+2013/11/07 18:21:36 1.1a-31 stream
+dirwin32.c,2.3,2.4
+Lot of fixes to support 2G+ files. Supports 2G+ on Windows/MSVC
+
+2013/10/23 22:25:59 1.1a-30 stream
+!README.FIX,2.62,2.63 ftnq.c,2.39,2.40 protocol.c,2.229,2.230 run.c,2.11,2.12 sys.h,2.36,2.37
+EWOULDBLOCK, O_BINARY, O_NOINHERIT could be defined to wrong value
+
+2013/10/23 22:22:01 1.1a-29 stream
+dirwin32.c,2.2,2.3 dirwin32.h,2.4,2.5
+Fix incorrect type and crash on Win64
+
+2013/06/29 10:20:51 1.1a-28 gul
+protocol.c,2.228,2.229
+Fix warning on windows
+
+2013/02/24 09:51:00 1.1a-27 gul
+perlhooks.c,2.82,2.83
+Fixed $ip var in perlhooks
+
+2013/02/04 14:47:13 1.1a-26 gul
+!README.FIX,2.61,2.62 !README.perl,2.16,2.17 binkd.cfg,2.61,2.62 binkd.conf,1.6,1.7 perlhooks.c,2.81,2.82 protoco2.h,2.31,2.32 protocol.c,2.227,2.228 readcfg.c,2.107,2.108 readcfg.h,2.41,2.42 rfc2553.c,2.5,2.6 server.c,2.55,2.56 server.h,2.4,2.5
+New config option "listen"
+
+2013/02/04 13:36:22 1.1a-25 gul
+inbound.c,2.48,2.49
+Fix in prev patch
+
+2013/02/03 23:37:46 1.1a-24 gul
+!README.FIX,2.60,2.61 Config.h,2.667,2.668 binkd.cfg,2.60,2.61 binkd.conf,1.5,1.6 btypes.h,2.11,2.12 inbound.c,2.47,2.48 inbound.h,2.8,2.9 protocol.c,2.226,2.227 readcfg.c,2.106,2.107 readcfg.h,2.40,2.41
+New option "rename-style [postfix|extension]"
+
+2013/02/03 09:28:52 1.1a-23 gul
+protocol.c,2.225,2.226
+Possible segfault on after_session perl hook
+
+2013/01/24 19:36:54 1.1a-22 gul
+inbound.c,2.46,2.47 sys.h,2.35,2.36
+Compilation on unix
+
+2013/01/24 19:33:42 1.1a-21 gul
+tools.c,2.78,2.79
+Syntax error
+
+2013/01/24 19:25:38 1.1a-20 gul
+binkd.c,2.113,2.114 bsy.c,2.11,2.12 getw.c,2.8,2.9 getw.h,2.1,2.2 inbound.c,2.45,2.46 iphdr.h,2.25,2.26 iptools.c,2.19,2.20 protoco2.h,2.30,2.31 protocol.c,2.224,2.225 run.c,2.10,2.11 sys.h,2.34,2.35 todo.lst,2.51,2.52 tools.c,2.77,2.78
+Support "-pipe" option on Win32
+
+2012/11/06 07:05:57 1.1a-19 stas
+run.c,2.9,2.10
+more comprehensible diagnostic message
+
+2012/11/02 13:25:36 1.1a-18 green
+run.c,2.8,2.9
+Check return value of pipe() call
+
+2012/10/28 23:30:17 1.1a-17 green
+readcfg.c,2.105,2.106 tools.c,2.76,2.77 tools.h,2.29,2.30
+Corrected Segfault in config error reporting on 64bit architectures 
+
+2012/09/24 12:09:37 1.1a-16 gul
+client.c,2.87,2.88
+Avoid compilation warning
+
+2012/09/24 03:26:53 1.1a-15 gul
+client.c,2.86,2.87 ftnnode.c,2.45,2.46 protocol.c,2.223,2.224 rfc2553.c,2.4,2.5
+Resolve logic changed
+
+2012/09/22 22:20:10 1.1a-14 gul
+run.c,2.7,2.8 run.h,2.2,2.3
+Compilation under mingw
+
+2012/09/22 08:17:20 1.1a-13 gul
+protocol.c,2.222,2.223
+Fix compilation under Windows
+
+2012/09/20 17:18:49 1.1a-12 gul
+client.c,2.85,2.86
+Minor fix in pipe processing
+
+2012/09/20 17:13:10 1.1a-11 gul
+client.c,2.84,2.85
+Minor memory leak
+
+2012/09/20 17:10:45 1.1a-10 gul
+client.c,2.83,2.84
+Bugfix in previous patch
+
+2012/09/20 15:17:27 1.1a-9 gul
+binkd.c,2.112,2.113 binkd.cfg,2.58,2.59 binkd.conf,1.3,1.4 btypes.h,2.10,2.11 client.c,2.82,2.83 ftnnode.c,2.44,2.45 ftnnode.h,2.23,2.24 iphdr.h,2.24,2.25 perlhooks.c,2.80,2.81 protoco2.h,2.29,2.30 protocol.c,2.221,2.222 protocol.h,2.3,2.4 readcfg.c,2.104,2.105 run.c,2.6,2.7 run.h,2.1,2.2 server.c,2.54,2.55 srif.c,2.21,2.22
+Added "call via external pipe" (for example ssh) functionality.
+Added "-a", "-f" options, removed obsoleted "-u" and "-i" (for win32).
+
+2012/07/07 10:19:29 1.1a-8 gul
+Config.h,2.650,2.651
+X64 option for binkd-msvc build
+
+2012/07/07 00:42:20 1.1a-7 green
+rfc2553.c,2.3,2.4
+Corrected potential double-free
+
+2012/07/05 23:56:44 1.1a-6 green
+rfc2553.c,2.2,2.3
+Corrected mutex handling for multi-threaded environments
+
+2012/06/26 14:42:06 1.1a-5 gul
+perlhooks.c,2.79,2.80
+Leave expected password unchanged if unmodified in on_handhsake hook
+
+2012/06/26 12:55:48 1.1a-4 gul
+protocol.c,2.220,2.221
+MD5 password is not mandatory on incoming
+
+2012/06/26 12:44:31 1.1a-3 gul
+protocol.c,2.219,2.220
+Code style
+
+2012/06/25 09:15:39 1.1a-2 gul
+tools.c,2.75,2.76
+Cosmetics
+
+2012/06/21 09:56:55 1.1a-1 gul
+!README,2.4,2.5 !README.FIX,2.56,2.57 Config.h,2.642,2.643 binkd.8,2.7,2.8 binkdfaq.txt.en,1.64,1.65 binkdfaq.txt.ru,1.85,1.86
+Version 1.1a
+
+2012/06/21 01:41:50 1.0a-614 green
+btypes.h,2.9,2.10 ftnnode.c,2.43,2.44 ftnnode.h,2.22,2.23
+1 hour timeout for defnode resolutions
+
+2012/06/21 00:48:14 1.0a-613 green
+ftnnode.c,2.42,2.43
+Reduce number of DNS resolutions during outbound scan
+
+2012/06/17 03:21:43 1.0a-612 green
+readcfg.c,2.103,2.104
+Segmentation violation in config dump
+
+2012/06/07 18:47:00 1.0a-611 green
+client.c,2.81,2.82
+Really try all addresses returned by getaddrinfo()
+
+2012/05/14 09:15:02 1.0a-610 gul
+binkd.c,2.111,2.112 client.c,2.80,2.81 common.h,2.15,2.16 readcfg.c,2.102,2.103 server.c,2.53,2.54 sys.h,2.33,2.34 reapchld.inc,2.5,NONE
+More safe signal handling
+
+2012/05/13 20:26:42 1.0a-609 gul
+!README.perl,2.14,2.15 perlhooks.c,2.78,2.79 protoco2.h,2.28,2.29 protocol.c,2.218,2.219
+Possibility to specify $passwd for session in on_handshake() perl hook
+
+2012/03/10 08:57:02 1.0a-608 gul
+protocol.c,2.217,2.218
+Improved error reporting on seek error
+
+2012/02/18 18:43:41 1.0a-607 green
+srv_gai.c,2.5,2.6
+Corrected linking issues on Win32
+
+2012/02/18 18:40:02 1.0a-606 green
+perlhooks.c,2.77,2.78
+perl_parse() may alter environment, though not used
+
+2012/02/02 10:42:47 1.0a-605 gul
+confopt.h,2.10,2.11
+Fixed gcc version for emx/klibc (by Max Vasilyev)
+
+2012/01/31 01:02:17 1.0a-604 green
+protocol.c,2.216,2.217
+Corrected FTS-1027 support, allow list of hash algos
+
+2012/01/27 20:25:48 1.0a-603 green
+client.c,2.79,2.80 protocol.c,2.215,2.216
+Improved getpeername() error handling
+
+2012/01/27 00:58:37 1.0a-602 green
+protocol.c,2.214,2.215
+Workaround for OS/2 kLIBC 0.6.4, getpeername() always returns -1
+
+2012/01/26 20:50:10 1.0a-601 green
+protocol.c,2.213,2.214
+Ensure the host information is not invalid
+
+2012/01/26 11:47:32 1.0a-600 gul
+perlhooks.c,2.76,2.77
+Avoid usage SvPV_nolen missing in perl 5.00553
+
+2012/01/25 23:03:16 1.0a-599 green
+confopt.h,2.9,2.10 iphdr.h,2.23,2.24
+Some changes to enable compilation on OS/2 with GCC/kLIBC
+
+2012/01/24 19:06:08 1.0a-598 gul
+service.c,2.56,2.57
+Remove third arg in binkd_main() call
+
+2012/01/23 23:18:47 1.0a-597 green
+ns_parse.c,1.2,1.3
+Fix regression in OS/2 / Watcom build
+
+2012/01/23 23:02:03 1.0a-596 green
+resolv.imp,NONE,1.1 ns_parse.c,1.1,1.2 ns_parse.h,1.1,1.2
+Add FSP1035 support for EMX (using own import library)
+
+2012/01/23 20:11:04 1.0a-595 gul
+w32tools.h,2.11,2.12
+Fixed declaration of binkd_main() (no 3rd param)
+
+2012/01/22 22:40:58 1.0a-594 green
+srv_gai.c,2.4,2.5
+Replaces index (deprecated) with strchr 
+
+2012/01/22 15:54:15 1.0a-593 green
+!README.FIX,2.55,2.56 binkd.cfg,2.57,2.58 binkd.conf,1.2,1.3 btypes.h,2.8,2.9 client.c,2.78,2.79 ftnnode.c,2.41,2.42 ftnnode.h,2.21,2.22 readcfg.c,2.101,2.102
+Allow limiting IPv4/6 usage per node using new flags -4/-6
+
+2012/01/22 14:27:09 1.0a-592 green
+srv_gai.c,2.3,2.4
+No SRV lookup for IP addresses
+
+2012/01/22 03:27:51 1.0a-591 green
+srv_gai.h,2.1,2.2
+Implement FSP1035 support for OS/2/Watcom
+
+2012/01/22 03:27:23 1.0a-590 green
+ns_parse.c,NONE,1.1 ns_parse.h,NONE,1.1
+Implement FSP1035 support for OS/2/Watcom
+
+2012/01/22 02:19:49 1.0a-589 green
+iptools.c,2.18,2.19
+Post lookup without host requires AI_PASSIVE
+
+2012/01/21 20:49:25 1.0a-588 green
+binkd.c,2.110,2.111
+Make environment usage ISO C compliant (no 3-args main())
+
+2012/01/08 21:18:07 1.0a-587 green
+protocol.c,2.212,2.213 server.c,2.52,2.53
+Improved hostname lookup and logging
+
+2012/01/08 19:35:00 1.0a-586 green
+client.c,2.77,2.78 ftnaddr.c,2.10,2.11 ftnaddr.h,2.6,2.7 ftnnode.c,2.40,2.41 iphdr.h,2.22,2.23 perlhooks.c,2.75,2.76 protocol.c,2.211,2.212 readcfg.c,2.100,2.101 readcfg.h,2.39,2.40 server.c,2.51,2.52 srif.c,2.20,2.21 srv_gai.c,2.2,2.3
+Avoid using MAXHOSTNAMELEN
+
+2012/01/08 18:23:54 1.0a-585 green
+binkd.c,2.109,2.110 confopt.h,2.8,2.9 iphdr.h,2.21,2.22
+Fixed compilation in Cygwin/MinGW
+
+2012/01/08 16:09:06 1.0a-584 green
+client.c,2.76,2.77 ftnnode.c,2.39,2.40 https.c,2.25,2.26 iptools.c,2.17,2.18 protocol.c,2.210,2.211 server.c,2.50,2.51
+Corrected initialization of getaddrinfo hints
+
+2012/01/08 15:21:20 1.0a-583 green
+iphdr.h,2.20,2.21
+Ensure sufficiently long MAXHOSTNAMELEN
+
+2012/01/08 15:05:41 1.0a-582 green
+ns_parse.c,1.1,1.2
+Autodetection for ns_msg element
+
+2012/01/08 04:04:18 1.0a-581 green
+srv_gai.c,2.1,2.2
+Implement fallback for system not exporting resolv/ns_initparse etc.
+
+2012/01/08 04:03:50 1.0a-580 green
+ns_parse.c,NONE,1.1
+Implement fallback for system not exporting resolv/ns_initparse etc.
+
+2012/01/08 01:38:48 1.0a-579 green
+iphdr.h,2.19,2.20 protocol.c,2.209,2.210 server.c,2.49,2.50
+Improved getnameinfo handling, retry without name resolution
+
+2012/01/07 19:00:23 1.0a-578 green
+confopt.h,2.7,2.8
+Added detection for PCC compiler
+
+2012/01/07 18:56:30 1.0a-577 green
+client.c,2.75,2.76 protocol.c,2.208,2.209 server.c,2.48,2.49
+Improved getnameinfo error handling
+
+2012/01/07 18:34:03 1.0a-576 green
+client.c,2.74,2.75 https.c,2.24,2.25 protocol.c,2.207,2.208 server.c,2.47,2.48
+Add error id where gai_strerror() is used
+
+2012/01/07 18:22:29 1.0a-575 green
+md5b.c,2.10,2.11 protocol.c,2.206,2.207 readcfg.c,2.99,2.100
+Fix some compiler warnings
+
+2012/01/07 15:52:26 1.0a-574 green
+rfc2553.c,2.1,2.2 rfc2553.h,2.1,2.2
+Removed C++ comments (bad style, I know)
+
+2012/01/07 15:24:46 1.0a-573 green
+confopt.h,2.6,2.7
+Fixed small typo
+
+2012/01/07 15:16:20 1.0a-572 green
+binkd.c,2.108,2.109 confopt.h,2.5,2.6
+Some more information in binkd -vv output
+
+2012/01/07 13:54:07 1.0a-571 green
+client.c,2.73,2.74 ftnnode.c,2.38,2.39 https.c,2.23,2.24 iptools.c,2.16,2.17 protocol.c,2.205,2.206 server.c,2.46,2.47
+Fix MSVC6 compilation errors
+
+2012/01/06 13:33:33 1.0a-570 gul
+server.c,2.45,2.46
+Format error
+
+2012/01/06 11:44:10 1.0a-569 gul
+client.c,2.72,2.73
+Error in log message format
+
+2012/01/06 11:08:51 1.0a-568 gul
+perlhooks.c,2.74,2.75
+Fix warnings on 64-bit systems
+
+2012/01/06 09:50:37 1.0a-567 gul
+perlhooks.c,2.73,2.74
+Fix warnings
+
+2012/01/06 09:24:19 1.0a-566 gul
+iphdr.h,2.18,2.19
+Fix resolv.h check under FreeBSD; cosmetics
+
+2012/01/03 19:53:04 1.0a-565 green
+srv_gai.c,NONE,2.1 srv_gai.h,NONE,2.1 !README.FIX,2.54,2.55 Config.h,2.591,2.592 client.c,2.71,2.72 ftnnode.c,2.37,2.38 https.c,2.22,2.23 iptools.c,2.15,2.16 iptools.h,2.8,2.9 protocol.c,2.204,2.205 readcfg.c,2.98,2.99 readcfg.h,2.38,2.39 server.c,2.44,2.45 todo.lst,2.50,2.51
+Implement FSP-1035 (SRV record usage)
+- add SRV enabled getaddrinfo() wrapper (srv_gai.[ch])
+- Unix (libresolv, autodetected) and Win32 support implemented
+- Port information is stored as string now, i.e. may be service name
+
+2012/01/03 19:26:05 1.0a-564 green
+rfc2553.c,NONE,2.1 rfc2553.h,NONE,2.1 !README.FIX,2.53,2.54 client.c,2.70,2.71 exitproc.c,2.43,2.44 ftnnode.c,2.36,2.37 https.c,2.21,2.22 iphdr.h,2.17,2.18 iptools.c,2.14,2.15 iptools.h,2.7,2.8 md5b.c,2.9,2.10 perlhooks.c,2.72,2.73 protoco2.h,2.27,2.28 protocol.c,2.203,2.204 readcfg.c,2.97,2.98 server.c,2.43,2.44 server.h,2.3,2.4 srif.c,2.19,2.20 sys.h,2.32,2.33
+Implemented IPv6 support
+- replace (almost) all getXbyY function calls with getaddrinfo/getnameinfo (RFC2553) calls
+- Add compatibility layer for target systems not supporting RFC2553 calls in rfc2553.[ch]
+- Add support for multiple listen sockets -- one for IPv4 and one for IPv6 (use V6ONLY)
+- For WIN32 platform add configuration parameter IPV6 (mutually exclusive with BINKD9X)
+- On WIN32 platform use Winsock2 API if IPV6 support is requested
+- config: node IP address literal + port supported: [<ipv6 address>]:<port>
+
+2012/01/03 19:25:37 1.0a-563 green
+TCPErr.c,2.15,2.16 WSock.c,2.3,2.4 breaksig.c,2.23,2.24 getfree.c,2.11,2.12 sem.c,2.8,2.9 service.c,2.55,2.56 tray.c,2.11,2.12 w32tools.c,2.19,2.20
+Implemented IPv6 support
+- replace (almost) all getXbyY function calls with getaddrinfo/getnameinfo (RFC2553) calls
+- Add compatibility layer for target systems not supporting RFC2553 calls in rfc2553.[ch]
+- Add support for multiple listen sockets -- one for IPv4 and one for IPv6 (use V6ONLY)
+- For WIN32 platform add configuration parameter IPV6 (mutually exclusive with BINKD9X)
+- On WIN32 platform use Winsock2 API if IPV6 support is requested
+- config: node IP address literal + port supported: [<ipv6 address>]:<port>
+
+2012/01/03 18:53:25 1.0a-562 green
+binkd.c,2.107,2.108
+Correct PID for servmgr in logs (i.e. PID after fork, not before)
+
+2011/08/17 18:51:48 1.0a-561 stas
+Config.h,2.586,2.587 readcfg.c,2.96,2.97
+move declaration of default value of root_domain to Config.h
+
+2011/08/17 12:02:59 1.0a-560 gul
+binkd.cfg,2.56,2.57 ftnaddr.c,2.9,2.10 ftnaddr.h,2.5,2.6 readcfg.c,2.95,2.96
+Default root-domain fidonet.net changed to binkp.net
+
+2011/05/06 18:44:06 1.0a-559 gul
+ftnq.c,2.38,2.39
+Fixed sorting files in filebox by time
+
+2011/02/19 08:23:06 1.0a-558 gul
+protocol.c,2.202,2.203
+Cosmetics
+
+2011/02/19 08:08:30 1.0a-557 gul
+protocol.c,2.201,2.202
+Yet another possible segfault on session start
+
+2011/01/25 17:33:52 1.0a-556 stas
+readcfg.c,2.94,2.95
+Prevent segfault if length of passwords exceed 40 chars (addition for previous patch
+
+2011/01/24 12:44:54 1.0a-555 gul
+protoco2.h,2.26,2.27 protocol.c,2.200,2.201
+Possible segfault on session start
+
+2010/12/12 14:32:14 1.0a-554 gul
+sys.h,2.31,2.32
+Fix previous patch
+
+2010/12/12 11:44:14 1.0a-553 gul
+protocol.c,2.199,2.200 sys.h,2.30,2.31
+Use Sleep() instead of select(0,NULL,NUL,NULL,...) under WIN32
+
+2010/12/02 13:04:16 1.0a-552 stas
+ftnnode.c,2.35,2.36
+if any of passwords for the node is presents, then don't change all passwords. The FIRST token "Node" with any not-empty password in the config file is set all passwords, the passwords from password-file is used for node if password don't set in main config file
+
+2010/08/26 09:26:28 1.0a-551 gul
+perlhooks.c,2.71,2.72
+Segfault on nested on_log() perl hook, reported by The Infidel numenorbbs at gmail.com
+
+2010/06/15 23:25:04 1.0a-550 gul
+bsy.c,2.10,2.11 todo.lst,2.49,2.50
+Improve diagnostics
+
+2010/05/24 17:38:06 1.0a-549 gul
+binkd.c,2.106,2.107
+Allow daemonize on client-only mode
+
+2010/05/24 17:37:03 1.0a-548 gul
+client.c,2.69,2.70
+Fix previous patch
+
+2010/05/24 17:24:41 1.0a-547 gul
+binkd.c,2.105,2.106 client.c,2.68,2.69 exitproc.c,2.42,2.43 sem.h,2.13,2.14
+Exit immediately after all jobs done in "-p" mode
+
+2010/05/22 11:11:33 1.0a-546 gul
+!README.perl,2.13,2.14 binlog.c,2.12,2.13 binlog.h,2.2,2.3 perlhooks.c,2.70,2.71 perlhooks.h,2.15,2.16 protoco2.h,2.25,2.26 protocol.c,2.198,2.199
+Call after_session() hook after removing bsy
+
+2010/03/30 09:13:03 1.0a-545 gul
+binkd.c,2.104,2.105
+Do not chdir to "/" on daemonize for use relative pathes on reload config
+
+2010/03/30 09:11:34 1.0a-544 gul
+perlhooks.c,2.69,2.70
+Improve logging
+
+2010/01/24 18:13:17 1.0a-543 stas
+client.c,2.67,2.68
+Log message changed: "unable to connect" -> "connection to smth. failed". Patch from Alexey Vissarionov 2:5020/545
+
+2009/11/27 16:20:10 1.0a-542 stas
+protocol.c,2.197,2.198
+fix typo
+
+2009/11/22 09:52:55 1.0a-541 gul
+protocol.c,2.196,2.197
+Send M_ERR and increase undialable on error rename received file
+
+2009/06/23 13:53:26 1.0a-540 gul
+perlhooks.c,2.68,2.69
+Perl <5.10 win32 PERLDL compatibility (no sv_free2 call)
+
+2009/06/23 09:20:39 1.0a-539 gul
+perlhooks.c,2.67,2.68
+Compilation error on win32, fixed
+
+2009/06/16 22:24:34 1.0a-538 gul
+binkd.c,2.103,2.104 tools.c,2.74,2.75 tools.h,2.28,2.29
+Cosmetics around mkargv()
+
+2009/06/16 01:42:21 1.0a-537 stas
+protocol.c,2.195,2.196
+Don't process second M_PWD
+
+2009/06/15 22:57:14 1.0a-536 stas
+binkd.c,2.102,2.103 tools.c,2.73,2.74 tools.h,2.27,2.28
+Fix OS/2 Watcom build crash. Thanks to Alexey Korop 2:461/155
+
+2009/06/12 20:43:04 1.0a-535 gul
+inbound.c,2.44,2.45
+close .hr
+
+2009/06/03 16:25:50 1.0a-534 gul
+perlhooks.c,2.66,2.67
+Fixed updating $hosts by on_hook() (broken in 1.0a-529)
+
+2009/06/03 10:50:57 1.0a-533 gul
+perlhooks.c,2.65,2.66
+$_ mistakenly set as read-only in need_reload() perl hook, fixed.
+
+2009/06/02 20:10:12 1.0a-532 gul
+binkd.c,2.101,2.102 client.c,2.66,2.67 common.h,2.14,2.15 exitproc.c,2.41,2.42 perlhooks.c,2.64,2.65 perlhooks.h,2.14,2.15 sem.h,2.12,2.13 tools.c,2.72,2.73
+Build binkd for OS/2 with perl support
+
+2009/05/31 10:16:50 1.0a-531 gul
+!README.perl,2.11,2.12 binkd.c,2.100,2.101 client.c,2.65,2.66 exitproc.c,2.40,2.41 ftnq.c,2.37,2.38 ftnq.h,2.10,2.11 perlhooks.c,2.63,2.64 perlhooks.h,2.13,2.14 protoco2.h,2.24,2.25 protocol.c,2.194,2.195 readcfg.c,2.93,2.94 readcfg.h,2.37,2.38 server.c,2.42,2.43 sys.h,2.29,2.30 tools.c,2.71,2.72
+Warning: many changes, may be unstable.
+Perl interpreter is now part of config and rerun on config reload.
+Perl 5.10 compatibility.
+Changes in outbound queue managing and sorting.
+
+2009/05/27 12:49:54 1.0a-530 gul
+readcfg.c,2.92,2.93
+Free perl-vars on unloading config
+
+2009/05/27 12:33:55 1.0a-529 gul
+!README.perl,2.10,2.11 binkd.cfg,2.53,2.54 perlhooks.c,2.62,2.63 readcfg.c,2.91,2.92 readcfg.h,2.36,2.37 todo.lst,2.48,2.49
+perl-var config keyword
+update $hosts by on_call() perl hook not only if it returns 2
+
+2009/05/26 16:04:39 1.0a-528 gul
+!README.perl,2.9,2.10 binkd.c,2.99,2.100 perlhooks.c,2.61,2.62 perlhooks.h,2.12,2.13 readcfg.c,2.90,2.91 readcfg.h,2.35,2.36
+New perl hooks:
+need_reload() - is it needed to reload config
+config_loaded() - after successful reading config
+
+2009/05/25 20:02:09 1.0a-527 gul
+perlhooks.c,2.60,2.61
+Perl 5.10 compatibility,
+avoid warnings.
+
+2009/05/25 19:24:10 1.0a-526 gul
+!README.perl,2.8,2.9 perlhooks.c,2.59,2.60
+Add forgotten vars in perl hooks,
+inhibit warnings
+
+2009/02/14 15:14:46 1.0a-525 gul
+protocol.c,2.193,2.194
+Bugfix: segfault on crafted input sequences,
+possible remote DoS for multithread versions (win32 and OS/2).
+Thanks to Dennis Yurichev.
+
+2009/02/04 22:13:50 1.0a-524 gul
+server.c,2.41,2.42
+Possible remote DoS (thx to Konstantin Kuzov 2:5019/40)
+
+2009/01/31 18:58:05 1.0a-523 gul
+binkd.c,2.98,2.99
+Update year in copyright line
+
+2008/12/09 11:04:13 1.0a-522 gul
+readcfg.c,2.89,2.90
+Use binkp from /etc/services if exists as iport/oport by default
+
+2008/11/25 11:35:31 1.0a-521 gul
+inbound.c,2.43,2.44
+Segfault if garbage in *.hr
+
+2008/08/05 09:05:19 1.0a-520 gul
+inbound.c,2.42,2.43 protocol.c,2.192,2.193 srif.c,2.18,2.19 srif.h,2.5,2.6
+Optimize srif functions params
+
+2008/04/17 18:19:47 1.0a-519 gul
+prothlp.c,2.9,2.10
+Fixed sending files with space or control chars in name
+
+2008/02/25 12:38:16 1.0a-518 gul
+protocol.c,2.191,2.192
+Fixed incorrect byte counters in log message about compressed files
+
+2008/01/16 12:05:45 1.0a-517 gul
+protocol.c,2.190,2.191
+Fix for previous patch
+
+2008/01/16 01:08:20 1.0a-516 stas
+protocol.c,2.189,2.190
+Log message with recommendation about NR mode to workaround remote bug
+
+2008/01/15 14:39:08 1.0a-515 gul
+perlhooks.c,2.58,2.59
+Perl_sv_2iv_flags()
+
+2008/01/15 13:54:04 1.0a-514 gul
+perlhooks.c,2.57,2.58
+typo in perlhooks.c rev. 2.57
+
+2008/01/15 13:19:05 1.0a-513 gul
+confopt.h,2.4,2.5
+Show bwlim setting on "binkd -vv" output
+
+2008/01/15 13:10:34 1.0a-512 gul
+perlhooks.c,2.56,2.57
+Compatibility with new perl versions (Perl_sv_2uv_flags()), not tested
+
+2008/01/14 22:45:46 1.0a-511 gul
+inbound.c,2.41,2.42 protocol.c,2.188,2.189
+Workaroud bug of earlyer binkd versions with partial files and not NR-mode
+
+2008/01/14 13:42:55 1.0a-510 gul
+protocol.c,2.187,2.188
+Fixed bug in protocol logic (partial files send without NR-mode)
+
+2007/10/30 09:43:12 1.0a-509 gul
+protocol.c,2.186,2.187
+Removed copy/pasted code from prev patch
+
+2007/10/30 09:33:27 1.0a-508 gul
+!README.FIX,2.48,2.49 binkd.cfg,2.52,2.53 btypes.h,2.7,2.8 protocol.c,2.185,2.186 readcfg.c,2.88,2.89 readcfg.h,2.34,2.35
+New config option dont-send-empty
+
+2007/10/13 08:35:19 1.0a-507 gul
+client.c,2.64,2.65
+play around checkcfg()
+
+2007/10/06 13:20:09 1.0a-506 gul
+client.c,2.63,2.64 readcfg.c,2.87,2.88 server.c,2.40,2.41
+more accurate checkcfg()
+
+2007/10/06 12:35:16 1.0a-505 gul
+binkd.c,2.97,2.98
+Retranslate SIGHUP from servermgr to clientmgr
+
+2007/10/04 20:30:32 1.0a-504 gul
+binkd.c,2.96,2.97 client.c,2.62,2.63 common.h,2.13,2.14 readcfg.c,2.86,2.87 server.c,2.39,2.40
+SIGHUP handler (thx to Sergey Babitch)
+
+2007/09/11 14:18:36 1.0a-503 gul
+protocol.c,2.184,2.185
+Use NR workaround for all binkd versions before 0.9.5
+
+2007/09/04 09:07:05 1.0a-502 gul
+perlhooks.c,2.55,2.56
+Memory leak
+
+2007/09/04 09:04:51 1.0a-501 gul
+protocol.c,2.183,2.184 protoco2.h,2.23,2.24
+Use workaround of NR-mode bug only for binkd/0.9.4
+
+2007/09/04 01:46:45 1.0a-500 gul
+protocol.c,2.182,2.183
+Remove workaround for asymmentric NR-mode
+
+2006/12/19 16:11:11 1.0a-499 stas
+service.c,2.54,2.55 service.h,2.14,2.15
+Minimize required access rights to operate with Windows NT/2000/XP/2003 services
+
+2006/10/25 12:49:08 1.0a-498 stas
+service.c,2.53,2.54
+Minimize required rigths for Windows NT/2000/XP/2003 service process.
+
+2006/10/25 12:04:57 1.0a-497 stas
+service.c,2.52,2.53
+Change requirements of access rigths for service in Windows 2000.
+
+2006/10/19 14:13:29 1.0a-496 stas
+sys.h,2.28,2.29
+Fix segmentation fault in mingw build (illegal fprintf format string)
+
+2006/08/09 10:09:17 1.0a-495 gul
+tools.c,2.70,2.71
+cosmetic fix
+
+2006/07/25 00:01:40 1.0a-494 gul
+binkd.c,2.95,2.96 protocol.c,2.181,2.182 sys.h,2.27,2.28
+use MSG_NOSIGNAL in send()
+
+2006/05/22 22:04:37 1.0a-493 stas
+inbound.c,2.40,2.41
+Fix deletion fault .hr/.dt pair. Bugreport from Alexey Fayans 2:5030/1997
+
+2006/02/02 20:44:14 1.0a-492 stas
+win9x.c,2.27,2.28
+fix mingw warnings (binkd/9x)
+
+2006/01/23 09:03:52 1.0a-491 stas
+prothlp.c,2.8,2.9
+Fix (null) suffix after ASO->BSO bundle name conversion
+
+2005/12/20 18:55:57 1.0a-490 gul
+readcfg.c,2.85,2.86
+Added '\n' after diag message
+
+2005/12/13 22:36:43 1.0a-489 stas
+snprintf.c,1.5,1.6
+Add support for sprintf() templates %I64i, %I64u and %lli, %llu
+
+2005/11/09 16:16:01 1.0a-488 stas
+tools.c,2.69,2.70
+Increase loglevel for low-level file operation 'remove file' to dont double log lines
+
+2005/11/09 16:14:05 1.0a-487 stas
+inbound.c,2.39,2.40
+Remove empty old .hr files
+
+2005/11/08 15:58:37 1.0a-486 gul
+inbound.c,2.38,2.39
+Fixed logic in condition in previous patch
+
+2005/11/08 15:35:29 1.0a-485 gul
+inbound.c,2.37,2.38
+Remove old .hr files without .dt from temp-inbound
+
+2005/11/07 20:25:18 1.0a-484 stas
+helpers.c,1.7,1.8
+fix signed/unsigned comparition
+
+2005/11/07 19:59:38 1.0a-483 stas
+helpers.c,1.6,1.7
+fix signed/unsigned comparition
+
+2005/11/07 19:55:13 1.0a-482 stas
+snprintf.c,1.4,1.5
+fix MS VC build (use MSVC-specific 64 bit integers
+
+2005/11/07 19:54:09 1.0a-481 stas
+protocol.c,2.180,2.181
+rtrim
+
+2005/11/06 20:43:09 1.0a-480 stas
+inbound.c,2.36,2.37
+Fix warning about signed/unsigned compare
+
+2005/11/06 20:03:53 1.0a-479 stas
+snprintf.c,1.3,1.4
+snprintf() now knowns about long long arguments
+
+2005/11/03 15:15:57 1.0a-478 stas
+binkd.c,2.94,2.95
+Option '-n' recognization
+
+2005/11/03 13:42:42 1.0a-477 stas
+binkd.c,2.93,2.94
+New option '-n', may be used to config check with option '-d' or to make poll with '-P'
+
+2005/11/03 13:39:31 1.0a-476 stas
+ftnq.c,2.36,2.37
+Fix warning about signed-unsigned incompatibility
+
+2005/10/28 10:13:49 1.0a-475 stas
+ftnnode.h,2.20,2.21
+Change poll flavour to 'direct' and allow specify poll flavour char at compile time using macro POLL_NODE_FLAVOUR
+
+2005/10/10 19:31:49 1.0a-474 stas
+binkd.c,2.92,2.93
+Fix compiler warning 'string length is greater than the length 509  ISO C89 compilers are required to support'
+
+2005/10/10 19:24:28 1.0a-473 stas
+crypt.h,2.4,2.5 prothlp.c,2.7,2.8
+Change method for generate 8+3 bundle name from ASO bundle name
+
+2005/10/10 18:44:27 1.0a-472 stas
+crypt.h,2.3,2.4 crypt.c,2.3,2.4
+Move CRC32's define into crypt.h
+
+2005/10/10 18:43:18 1.0a-471 stas
+crypt.h,2.2,2.3
+Prevent double include crypt.h
+
+2005/10/03 10:52:46 1.0a-470 gul
+protocol.c,2.179,2.180
+Fixed memory leak from 1.0a-466 (thanks to Roman Trunov)
+
+2005/10/03 09:49:10 1.0a-469 gul
+perlhooks.c,2.54,2.55 perlhooks.h,2.11,2.12
+Fixed typos in previous patch
+
+2005/10/03 00:47:41 1.0a-468 gul
+!README.perl,2.7,2.8 perlhooks.c,2.53,2.54 perlhooks.h,2.10,2.11 protocol.c,2.178,2.179
+set_rlimit() perl hook
+
+2005/10/02 23:48:47 1.0a-467 gul
+!README.perl,2.6,2.7 ftnq.c,2.35,2.36 perlhooks.c,2.52,2.53 protocol.c,2.177,2.178
+- add $traf_mail and $traf_files vars for on_call() and on_handshake() hooks;
+- optimize queue scan in perl hooks;
+- documentation for $rc var in after_session() hook.
+
+2005/10/02 21:03:31 1.0a-466 gul
+protocol.c,2.176,2.177
+Verbously report about mail/files for us when receive TRF from remote.
+
+2005/10/02 19:59:17 1.0a-465 gul
+getopt.h,2.3,2.4
+Avoid conflicts if getopt() exists but HAVE_GETOPT not defined
+
+2005/10/02 19:35:27 1.0a-464 gul
+sys.h,2.26,2.27
+
+2005/10/02 18:03:16 1.0a-463 gul
+ftnq.c,2.34,2.35 ftnq.h,2.9,2.10 protocol.c,2.175,2.176
+Fileboxes did not works for unlisted nodes
+
+2005/09/28 23:41:23 1.0a-462 gul
+!README.FIX,2.47,2.48 binkd.cfg,2.49,2.50 btypes.h,2.6,2.7 ftnaddr.c,2.8,2.9 ftnaddr.h,2.4,2.5 readcfg.c,2.84,2.85
+Optional parameter root-domain for domain config option.
+
+2005/09/28 22:02:33 1.0a-461 gul
+protocol.c,2.174,2.175
+Fixed unsigned int arithmetics in rate-limits
+
+2005/09/28 10:18:53 1.0a-460 gul
+sys.h,2.25,2.26 tools.c,2.68,2.69
+gettvtime() (time of day with more then second exactitude) for win32.
+Thanks to Alexander Reznikov.
+
+2005/09/27 23:16:29 1.0a-459 gul
+tools.c,2.67,2.68
+
+2005/09/27 23:15:48 1.0a-458 gul
+protocol.c,2.173,2.174 sys.h,2.24,2.25 tools.c,2.66,2.67
+Hopefully fixed compilation under windows
+
+2005/09/26 22:01:11 1.0a-457 gul
+protoco2.h,2.22,2.23 protocol.c,2.172,2.173 readcfg.c,2.83,2.84 sys.h,2.23,2.24 tools.c,2.65,2.66
+bw limits code partially rewrited (not tested)
+
+2005/09/23 17:09:24 1.0a-456 gul
+https.c,2.20,2.21
+Change sprintf() to snprintf() in https and ntlm code.
+
+2005/09/23 17:08:58 1.0a-455 gul
+helpers.c,1.5,1.6 helpers.h,1.2,1.3
+Change sprintf() to snprintf() in https and ntlm code.
+
+2005/09/23 16:32:51 1.0a-454 gul
+client.c,2.61,2.62 https.c,2.19,2.20 https.h,2.3,2.4
+Bugfix in work via proxy with authorization
+
+2005/09/23 16:04:20 1.0a-453 gul
+protocol.c,2.171,2.172
+Fix warning
+
+2005/09/23 15:24:38 1.0a-452 gul
+!README.perl,2.5,2.6 client.c,2.60,2.61 perlhooks.c,2.51,2.52 perlhooks.h,2.9,2.10
+define $hosts variable for on_call() perl hook (can be changed).
+Changes for $proxy and $socks are now local for the single outgoing call.
+
+2005/09/22 15:11:24 1.0a-451 gul
+prothlp.c,2.6,2.7
+Dequote filenames for compare in M_GET processing
+
+2005/09/12 20:07:41 1.0a-450 gul
+protocol.c,2.170,2.171
+Turn compression on if OPT EXTCMD GZIP received after login phase
+
+2005/08/08 13:12:14 1.0a-449 val
+inbound.c,2.35,2.36
+fix segfault when a remote doesn't provide an address but sends a file
+(bug reported by andrew clarke)
+
+2005/07/04 21:24:49 1.0a-448 gul
+inbound.c,2.34,2.35 inbound.h,2.7,2.8 protocol.c,2.169,2.170 srif.c,2.17,2.18 srif.h,2.4,2.5
+Move events checking and running to inb_test() for reducing repeated code;
+do not run immediate events twice;
+fixed argus-style freqs (not tested).
+
+2005/06/06 20:14:07 1.0a-447 stream
+protocol.c,2.168,2.169
+Fuck this buggy CVS compression!
+
+2005/06/06 19:55:28 1.0a-446 stream
+protocol.c,2.167,2.168
+Fixed broken ND-mode status.
+
+2005/06/06 19:43:42 1.0a-445 stream
+zlibdl.h,2.18,2.19
+Updates for OS/2+Watcom+zlib compilation
+
+2005/05/13 14:12:08 1.0a-444 stas
+btypes.h,2.5,2.6
+update coment for struct _FTNQ
+
+2005/04/18 19:46:46 1.0a-443 stream
+readcfg.c,2.82,2.83
+Double free of pNodArray caused mysterious crashes on config reload
+
+2005/04/05 10:31:48 1.0a-442 gul
+sys.h,2.22,2.23
+Fixed bug in have_intmax_t detection
+
+2005/03/30 20:35:33 1.0a-441 stream
+binkd.cfg,2.48,2.49 client.c,2.59,2.60
+Finally implemented '-noproxy' node option.
+
+2005/03/28 13:15:22 1.0a-440 val
+client.c,2.58,2.59 perlhooks.c,2.50,2.51 perlhooks.h,2.8,2.9
+manage proxy/socks via perl-hook on_call()
+
+2005/02/09 19:34:36 1.0a-439 val
+binkd.cfg,2.47,2.48 protocol.c,2.166,2.167
+config docs and makefile changes for the bandwidth limiting code
+
+2004/11/22 17:56:47 1.0a-438 stream
+readcfg.c,2.81,2.82 tools.c,2.64,2.65
+Errors in config were not logged to file (log file name was set only
+when config was completely loaded, checked and accepted). Now log
+settings are changed immediately after each log-related directive
+(only for first-time config load)
+
+2004/11/22 17:51:20 1.0a-437 stas
+readcfg.c,2.80,2.81
+Change error level to -1 for the config file parameter error (binkd/w32 will display message box with error message)
+
+2004/11/21 14:18:32 1.0a-436 val
+protoco2.h,2.21,2.22 protocol.c,2.165,2.166
+bandwidth limiting code is now implemented for receiving too
+
+2004/11/21 13:55:44 1.0a-435 val
+readcfg.c,2.79,2.80
+remove old commented code for limit-rate debug output
+
+2004/11/19 17:58:51 1.0a-434 gul
+perlhooks.c,2.49,2.50
+Add dynamic load function used by new errors handler
+
+2004/11/19 16:59:45 1.0a-433 gul
+perlhooks.c,2.48,2.49
+Typo in new perl errors handler
+
+2004/11/15 12:32:20 1.0a-432 gul
+perlhooks.c,2.47,2.48
+Fixed compilation multithread version with perl
+
+2004/11/12 16:40:17 1.0a-431 gul
+binkd.c,2.91,2.92
+Also one syntax error
+
+2004/11/09 09:04:33 1.0a-430 gul
+binkd.c,2.90,2.91
+Syntax error in previous patch
+
+2004/11/07 15:52:46 1.0a-429 stream
+client.c,2.57,2.58 readcfg.h,2.33,2.34
+Automatically rescan outbound after reload of configuration
+
+2004/11/07 15:20:19 1.0a-428 stream
+server.c,2.38,2.39
+Lock config of server manager so it can be safely reloaded in SIGHUP
+
+2004/11/07 09:26:41 1.0a-427 gul
+!README.FIX,2.46,2.47 binkd.c,2.89,2.90 binkd.cfg,2.46,2.47 readcfg.c,2.78,2.79 readcfg.h,2.32,2.33
+New config options zlib-dll and bzlib2-dll
+
+2004/11/05 14:44:30 1.0a-426 gul
+client.c,2.56,2.57
+Client manager did not reload config on change
+in fork versions (unix, os2-emx)
+
+2004/11/05 14:25:08 1.0a-425 gul
+protocol.c,2.164,2.165
+hide-aka & present-aka did not work on outgoing sessions
+
+2004/11/05 09:45:24 1.0a-424 gul
+readcfg.c,2.77,2.78
+Bugfix in passwords and defnode processing logic
+
+2004/11/05 07:31:01 1.0a-423 stas
+ftndom.c,2.6,2.7
+Checks for NULL pointer in get_matched_domain()
+
+2004/11/04 10:55:20 1.0a-422 stream
+ftndom.c,2.5,2.6
+Bugfix to previous bugfix.
+Also log warning if we have to guess default domain name from main AKA
+or first domain.
+
+2004/11/04 08:22:04 1.0a-421 stas
+ftndom.c,2.4,2.5
+BUGFIX: segfault if 1st address is 4D
+
+2004/11/03 10:22:30 1.0a-420 stas
+protocol.c,2.163,2.164
+Set 'unsigned char *' to prevent warnings
+
+2004/11/02 15:23:32 1.0a-419 stas
+getfree.c,2.10,2.11
+More fix getfree() (win32)
+
+2004/11/01 15:05:43 1.0a-418 gul
+client.c,2.55,2.56
+Bugfix in connect-timeout
+
+2004/10/29 16:05:14 1.0a-417 stas
+getfree.c,2.9,2.10
+Add diagnostic about free space great 4Tb (win32 only)
+
+2004/10/29 14:16:37 1.0a-416 gul
+inbound.c,2.33,2.34
+Fixed bug with check required free space if off_t is signed long
+and getfree() returns ULONG_MAX.
+
+2004/10/26 20:37:05 1.0a-415 gul
+binkd.cfg,2.44,2.45 readcfg.c,2.76,2.77
+Set time intervals in human-readable form (12h instead of 43200 etc.)
+
+2004/10/26 18:46:47 1.0a-414 gul
+readcfg.c,2.75,2.76
+Process option skipmask for backward compatibility
+
+2004/10/25 20:04:59 1.0a-413 gul
+ftnnode.c,2.34,2.35 readcfg.c,2.74,2.75 readcfg.h,2.31,2.32
+Process passwords file after all, independent of its place in config.
+Use first password for node if several specified.
+
+2004/10/20 20:31:05 1.0a-412 gul
+protocol.c,2.162,2.163
+Fixed segfault on transmission compressed files
+when sizeof(off_t)!=sizeof(long) and loglevel>3.
+
+2004/10/19 20:09:11 1.0a-411 gul
+readcfg.c,2.73,2.74
+Remove duplicate addresses from config
+
+2004/10/19 19:28:25 1.0a-410 gul
+inbound.c,2.32,2.33 inbound.h,2.6,2.7 protocol.c,2.161,2.162
+Do not remove complete received but not renamed partial files
+for prevent data loss in ND-mode.
+Remove all partial files for node after successfull session.
+
+2004/10/18 18:22:24 1.0a-409 gul
+client.c,2.54,2.55 common.h,2.12,2.13 exitproc.c,2.39,2.40 perlhooks.c,2.46,2.47 reapchld.inc,2.4,2.5 tools.c,2.63,2.64
+Change handle perl errors method
+
+2004/10/18 18:16:40 1.0a-408 gul
+protocol.c,2.160,2.161
+Minor bugfix (patch from Victor Levenets <aq@takas.lt>)
+
+2004/10/18 13:29:35 1.0a-407 gul
+md5b.c,2.8,2.9
+Bugfix in MD_getChallenge(), thanks to Victor Levenets <aq@takas.lt>
+
+2004/10/15 13:24:16 1.0a-406 stas
+TCPErr.c,2.14,2.15
+binkd/win32/win95: Add "W32 API error" string into system error messages
+
+2004/10/08 11:30:37 1.0a-405 gul
+binlog.c,2.11,2.12
+binlog rev.2.11 bugfix
+
+2004/10/01 12:55:21 1.0a-404 gul
+protocol.c,2.159,2.160
+Fixed memory leak
+(Reported by Victor Levenets <aq@takas.lt>)
+
+2004/09/21 11:32:26 1.0a-403 val
+protocol.c,2.158,2.159
+bandwidth limiting logic changed from "max for akas" to "min for akas"
+
+2004/09/21 11:27:55 1.0a-402 val
+ftnnode.c,2.33,2.34 ftnnode.h,2.19,2.20 readcfg.c,2.72,2.73
+distinguish nodes, listed in binkd config and passwords file - overwrite defnode parameters (e.g. host) for the later
+(hope, it'll fix reported bug with not calling defnode)
+
+2004/09/11 17:37:17 1.0a-401 gul
+readcfg.c,2.71,2.72
+Fix erroneously applied previous patch
+
+2004/09/11 16:57:20 1.0a-400 gul
+ftnnode.c,2.32,2.33
+Remove duplicate line
+
+2004/09/11 15:34:18 1.0a-399 gul
+readcfg.c,2.70,2.71
+Check for zonenumber syntax in the "domain" keyword - it should be
+decimal integer. Zone "3c3" is now error, but not 3.
+
+2004/09/06 13:50:14 1.0a-398 val
+ftnnode.c,2.31,2.32
+node data could be over-written by defnode data if hosts were set to `-', fixed
+
+2004/09/06 13:47:14 1.0a-397 val
+btypes.h,2.4,2.5 ftnnode.c,2.30,2.31 ftnnode.h,2.18,2.19 protocol.c,2.157,2.158 readcfg.c,2.69,2.70 readcfg.h,2.30,2.31
+bandwidth limiting code advancements, `listed' session state fix
+
+2004/09/02 12:32:00 1.0a-396 val
+protocol.c,2.156,2.157
+release CPU when limiting bandwidth on Win32
+
+2004/09/02 12:00:59 1.0a-395 val
+readcfg.c,2.68,2.69
+fix warnings
+
+2004/09/02 11:56:45 1.0a-394 val
+protoco2.h,2.20,2.21 protocol.c,2.155,2.156 readcfg.c,2.67,2.68 readcfg.h,2.29,2.30
+bandwidth limiting config parameter 'limit-rate'
+
+2004/08/30 11:05:39 1.0a-393 val
+protoco2.h,2.19,2.20 protocol.c,2.154,2.155
+bandwidth limiting code [experimental]
+
+2004/08/24 14:31:43 1.0a-392 gul
+sys.h,2.21,2.22
+Fix typo in prev patch
+
+2004/08/21 20:13:38 1.0a-391 gul
+protoco2.h,2.18,2.19
+Fix total bytes logging
+
+2004/08/11 21:31:22 1.0a-390 hbrew
+zlibdl.h,2.17,2.18
+zlibdl.h: include <windows.h> for compatibility with zlib 1.2.1
+
+2004/08/06 10:05:31 1.0a-389 gul
+sys.h,2.20,2.21
+Fixed typo in prev patch
+
+2004/08/04 22:52:17 1.0a-388 gul
+binkd.c,2.88,2.89 client.c,2.53,2.54 server.c,2.37,2.38 sys.h,2.19,2.20
+Change SIGCHLD handling, make signal handler more clean,
+prevent occasional hanging (mutex deadlock) under linux kernel 2.6.
+
+2004/08/04 16:29:06 1.0a-387 gul
+perlhooks.c,2.45,2.46
+Fix compiler warning
+
+2004/08/04 16:15:44 1.0a-386 gul
+sys.h,2.18,2.19
+Define u16 and u32 types more clean
+
+2004/08/04 16:07:05 1.0a-385 gul
+binlog.c,2.10,2.11
+Binlogs writes correctly now independent on bytes order and alignment
+
+2004/08/04 14:33:13 1.0a-384 gul
+ftnq.c,2.33,2.34 ftnq.h,2.8,2.9 inbound.c,2.31,2.32 protocol.c,2.153,2.154 sys.h,2.17,2.18
+Attemp to support large files (>4G)
+
+2004/08/04 09:41:11 1.0a-383 gul
+ftnq.c,2.32,2.33 sys.h,2.16,2.17
+Use uintmax_t and PRIuMAX for printing file size (off_t)
+
+2004/08/03 23:47:24 1.0a-382 gul
+tools.c,2.62,2.63 tools.h,2.26,2.27
+Use localtime_r() and gmtime_r() if exists
+
+2004/08/03 23:06:17 1.0a-381 gul
+client.c,2.52,2.53
+Remove unneeded longjump from signal handler
+
+2004/07/23 14:40:23 1.0a-380 gul
+perlhooks.c,2.44,2.45
+Fix compilation warning
+
+2004/07/12 11:21:57 1.0a-379 stas
+iphdr.h,2.16,2.17
+Fix the file name case. Bugreport from Andrey Slusar 2:467/126
+
+2004/06/07 13:47:16 1.0a-378 gul
+srif.c,2.16,2.17
+Touch flag if its already exists
+
+2004/03/29 19:26:20 1.0a-377 stas
+binkd32x32.ico,NONE,2.1 binkd32x32blue.ico,NONE,2.1 binkdres.rc,1.7,1.8 w32tools.c,2.18,2.19
+use different icons for window and for systray
+
+2004/02/29 10:51:54 1.0a-376 gul
+readcfg.c,2.66,2.67
+Bugfix in print_node_info
+(patch from Victor Levenets).
+
+2004/02/29 10:51:17 1.0a-375 gul
+srif.c,2.15,2.16
+Fixed *A@ macro on event calls
+(patch from Victor Levenets).
+
+2004/02/08 23:13:26 1.0a-374 gul
+ftnq.c,2.31,2.32
+Inhibit redundrant error message in log about filebox under unix
+
+2004/02/07 16:06:40 1.0a-373 hbrew
+Config.h,2.396,2.397 binkd.c,2.87,2.88 common.h,2.11,2.12 confopt.h,2.3,2.4 exitproc.c,2.38,2.39 tools.c,2.61,2.62
+Macros: RTLDLL-->RTLSTATIC, BINKDW9X-->BINKD9X
+
+2004/02/07 16:06:09 1.0a-372 hbrew
+breaksig.c,2.22,2.23 win9x.c,2.26,2.27 win9x.h,2.6,2.7
+Macros: RTLDLL-->RTLSTATIC, BINKDW9X-->BINKD9X
+
+2004/01/24 03:07:07 1.0a-371 hbrew
+service.c,2.51,2.52
+Fix warning
+
+2004/01/23 20:09:34 1.0a-370 gul
+protocol.c,2.152,2.153
+Fixed erroneous "Unknown option ... ignored" message
+
+2004/01/19 10:51:40 1.0a-369 hbrew
+binkdres.rc,1.6,1.7 w32tools.c,2.17,2.18
+Change icon ID to 1
+
+2004/01/18 22:39:36 1.0a-368 gul
+ftnnode.c,2.29,2.30
+Undo previous patch
+
+2004/01/15 16:49:15 1.0a-367 gul
+ftnnode.c,2.28,2.29
+If only two passwords for a node specified in passwd-file, use its as
+in,out+pkt but not in+out,pkt.
+
+2004/01/09 12:55:35 1.0a-366 gul
+snprintf.c,1.2,1.3
+Avoid gcc 3.x warning
+
+2004/01/08 15:28:21 1.0a-365 val
+ftnq.c,2.30,2.31 protoco2.h,2.17,2.18 protocol.c,2.151,2.152
+* extend struct dirent for dos and win32 in order to get file attribute
+* ignore hidden files in boxes for dos/win32/os2
+* if we can differ files from directories w/o stat(), don't call stat()
+  when scanning boxes (unix: freebsd)
+* if we can't unlink file, don't send it again in the same session
+* for dos/win32/os2 try to clear read/only attribute if can't unlink file
+
+2004/01/08 15:27:52 1.0a-364 val
+dirwin32.c,2.1,2.2 dirwin32.h,2.3,2.4
+* extend struct dirent for dos and win32 in order to get file attribute
+* ignore hidden files in boxes for dos/win32/os2
+* if we can differ files from directories w/o stat(), don't call stat()
+  when scanning boxes (unix: freebsd)
+* if we can't unlink file, don't send it again in the same session
+* for dos/win32/os2 try to clear read/only attribute if can't unlink file
+
+2004/01/08 15:07:42 1.0a-363 val
+inbound.c,2.30,2.31 tools.c,2.60,2.61 tools.h,2.25,2.26
+use new pkt header parsing function in check-pkthdr, remove older function
+
+2004/01/08 15:03:53 1.0a-362 val
+binkd.cfg,2.40,2.41 inbound.c,2.29,2.30 protocol.c,2.150,2.151 tools.c,2.59,2.60 tools.h,2.24,2.25
+* new functions for parsing and updating addresses in pkt header (raw, char*)
+* use these functions in shared aka logic
+* set password in pkt to the pkt password for the main aka of sharing node
+* config file description updated
+
+2004/01/08 14:57:23 1.0a-361 val
+btypes.h,2.3,2.4 ftnnode.c,2.27,2.28 ftnnode.h,2.17,2.18 inbound.c,2.28,2.29 perlhooks.c,2.43,2.44 protocol.c,2.149,2.150 readcfg.c,2.65,2.66
+* parse up to 3 comma-separated passwords (in,pkt,out)
+* use out password for outgoing sessions if it's set
+
+2004/01/08 14:48:18 1.0a-360 val
+binkd.c,2.86,2.87
+add missing 'break' for -d option case
+
+2004/01/08 14:46:12 1.0a-359 val
+compress.c,2.3,2.4 zlibdl.c,2.14,2.15
+correct macrodef for msvc (_msc_ver instead of __msc__)
+
+2004/01/08 13:36:09 1.0a-358 gul
+protocol.c,2.148,2.149
+Fix typo in previous patch
+
+2004/01/07 23:42:26 1.0a-357 stas
+w32tools.c,2.16,2.17
+Don't export w32exitfunc()
+
+2004/01/07 23:40:49 1.0a-356 stas
+binkd.c,2.85,2.86
+Options -i and -u is marked deprecated for win32
+
+2004/01/07 15:12:33 1.0a-355 gul
+binkd.8,2.5,2.6 binkd.c,2.84,2.85 protocol.c,2.147,2.148 readcfg.c,2.64,2.65
+Update 2003->2004 in copyright notices
+
+2004/01/07 14:23:42 1.0a-354 gul
+!README.FIX,2.45,2.46 !README.perl,2.4,2.5 binkd.cfg,2.39,2.40 perlhooks.c,2.42,2.43 protocol.c,2.146,2.147 readcfg.c,2.63,2.64 readcfg.h,2.28,2.29 todo.lst,2.43,2.44
+Remove zaccept keyword, receiving compressed files possibility
+is always on now if binkd was compiled with zlib/bzip2 support.
+
+2004/01/07 14:09:47 1.0a-353 gul
+ftnnode.h,2.16,2.17
+New function free_nodes()
+
+2004/01/07 14:07:50 1.0a-352 gul
+ftnnode.c,2.26,2.27 readcfg.c,2.62,2.63
+New function free_nodes()
+
+2004/01/07 12:15:53 1.0a-351 gul
+binkd.c,2.83,2.84
+Remove redundant preprocessor directive
+
+2004/01/07 12:13:30 1.0a-350 gul
+binkd.c,2.82,2.83
+Fix usage output
+
+2004/01/04 18:55:04 1.0a-349 stas
+service.c,2.50,2.51 w32tools.h,2.10,2.11 win9x.c,2.25,2.26
+Move declarations of the 'binkd_main' into one place (nt/w32tools.h)
+
+2004/01/04 18:01:11 1.0a-348 stas
+w32tools.c,2.15,2.16
+Fix service name convertion: now Service Display Name may be content a comma
+
+2004/01/04 17:51:08 1.0a-347 stas
+w32tools.c,2.14,2.15
+Fix service name convertion: now Service Display Name (parameter of the '-S' command line option) may be content a '\' and '/' characters
+
+2004/01/04 17:19:39 1.0a-346 stas
+service.c,2.49,2.50
+Use Service Display Name to display (log, windows title)
+
+2004/01/03 21:33:44 1.0a-345 stas
+binkd.c,2.81,2.82 !README.FIX,2.41,2.42
+Implement install and uninstall win* services using -t option
+
+2004/01/03 21:26:13 1.0a-344 stas
+service.c,2.48,2.49
+Decrease delay for service operations
+
+2004/01/03 21:04:52 1.0a-343 stas
+w32tools.h,2.9,2.10 w32tools.c,2.13,2.14
+New functions: public w32Init() and hidden w32exitfunc()
+
+2004/01/03 21:04:22 1.0a-342 stas
+exitproc.c,2.37,2.38 binkd.c,2.80,2.81
+New functions: public w32Init() and hidden w32exitfunc()
+
+2004/01/03 20:42:44 1.0a-341 stas
+binkd.c,2.79,2.80
+Now use srvname var in nt/* only
+
+2004/01/03 20:39:30 1.0a-340 stas
+w32tools.c,2.12,2.13 service.c,2.47,2.48
+Improve service identification
+
+2004/01/03 20:14:43 1.0a-339 stas
+w32tools.h,2.8,2.9
+Two macroses: IsNTService and Is9xService
+
+2004/01/03 20:10:12 1.0a-338 stas
+tray.c,2.10,2.11
+Fix typo
+
+2004/01/03 17:46:12 1.0a-337 stas
+service.c,2.46,2.47
+Fix: do not load icon into service control window at binkd service starts
+
+2004/01/03 17:39:24 1.0a-336 stas
+binkd.c,2.78,2.79
+Implement service control option for Windows NT/2k/XP
+
+2004/01/03 17:38:54 1.0a-335 stas
+service.c,2.45,2.46
+Implement service control option for Windows NT/2k/XP
+
+2004/01/03 15:35:34 1.0a-334 stas
+tools.c,2.58,2.59
+Fix log file name usage (from enviroment)
+
+2004/01/03 14:38:28 1.0a-333 stas
+binkd.c,2.77,2.78
+Small change (win32)
+
+2004/01/03 14:18:16 1.0a-332 stas
+Config.h,2.354,2.355 binkd.c,2.76,2.77 exitproc.c,2.36,2.37 sem.h,2.11,2.12
+Implement full icon support (winNT/2k/XP)
+
+2004/01/03 14:17:47 1.0a-331 stas
+tray.c,2.9,2.10 tray.h,2.2,2.3 w32tools.c,2.11,2.12 w32tools.h,2.7,2.8
+Implement full icon support (winNT/2k/XP)
+
+2004/01/03 13:17:00 1.0a-330 stas
+binkd.c,2.75,2.76
+Remove the obsoleted rerun variable
+
+2004/01/02 23:20:19 1.0a-329 stas
+w32tools.c,2.10,2.11 w32tools.h,2.6,2.7
+GetMainWindow(): function retrieves the window handle used by the main window of application
+
+2004/01/02 22:58:59 1.0a-328 stas
+!README.FIX,2.39,2.40 Config.h,2.350,2.351 tools.c,2.57,2.58
+Log file may be defined in enviroment variable BINKD_LOG
+
+2004/01/02 20:02:42 1.0a-327 stas
+service.c,2.44,2.45
+Small code change to simplification
+
+2004/01/02 18:04:06 1.0a-326 stas
+tray.c,2.8,2.9
+Cleanup code, remove obsolete delay
+
+2004/01/02 18:02:25 1.0a-325 stas
+tray.c,2.7,2.8
+Show icon in the top left corner of the binkd window. Thanks to Alexander Reznikov <homebrewer@yandex.ru>
+
+2004/01/02 17:46:45 1.0a-324 stas
+tray.c,2.6,2.7
+Load tray icon from compiled resource
+
+2004/01/02 17:32:02 1.0a-323 stas
+inbound.c,2.27,2.28
+Fix the minfree token usage and fix getfree() on Win >w95
+
+2004/01/02 17:31:33 1.0a-322 stas
+getfree.c,2.8,2.9
+Fix the minfree token usage and fix getfree() on Win >w95
+
+2004/01/02 06:05:33 1.0a-321 stas
+getfree.c,2.7,2.8
+Fix warning (type convertion)
+
+2004/01/01 00:01:35 1.0a-320 stas
+tray.c,2.5,2.6
+Initialise variable
+
+2003/12/31 12:06:09 1.0a-319 stas
+getfree.c,2.6,2.7
+Fix getfree for very large disks and for mounted partitions
+
+2003/12/29 12:55:18 1.0a-318 val
+pmatch.c,2.2,2.3
+fix to pmatch(): symbol after '*' was case-sensitive in any case
+
+2003/12/29 12:49:42 1.0a-317 gul
+getw.c,2.7,2.8 !README.FIX,2.36,2.37
+Comments in config now starts by "#" only if prev char is space
+
+2003/12/28 12:23:28 1.0a-316 gul
+protocol.c,2.145,2.146
+Print file offset on "receiving interrupted" log message
+
+2003/12/26 23:31:48 1.0a-315 gul
+reapchld.inc,2.3,2.4
+Report exit code or signal number of exited processes
+
+2003/12/26 23:12:10 1.0a-314 gul
+btypes.h,2.2,2.3 ftnq.c,2.29,2.30 inbound.c,2.26,2.27 protocol.c,2.144,2.145
+Change unixtime and file length/offset to unsigned in protocol messages
+
+2003/12/26 22:11:34 1.0a-313 gul
+binkd.8,2.3,2.4 binkd.c,2.74,2.75 readcfg.c,2.61,2.62 readcfg.h,2.27,2.28 todo.lst,2.42,2.43
+Add -d commandline switch - dump parsed config and exit;
+remove 'debugcfg' config token.
+
+2003/12/26 09:51:15 1.0a-312 val
+readcfg.c,2.60,2.61
+up to 3 comma-separated passwords in <passwords> file are parsed
+
+2003/12/24 02:37:28 1.0a-311 gul
+perlhooks.c,2.41,2.42
+Fixed mingw with PERLDL compilation
+
+2003/12/24 02:36:45 1.0a-310 gul
+Config.h,2.331,2.332 sys.h,2.15,2.16
+Move system-dependent macros from Config.h to sys.h,
+add pipe() wrapper for mingw32.
+
+2003/12/15 02:03:58 1.0a-309 gul
+protocol.c,2.143,2.144 todo.lst,2.41,2.42
+NZ option for M_GET command - request uncompressed file
+
+2003/12/10 13:12:15 1.0a-308 gul
+compress.c,2.2,2.3 protocol.c,2.142,2.143
+Minor fix in decompression deinit
+
+2003/12/09 23:58:23 1.0a-307 gul
+compress.c,2.1,2.2 compress.h,2.2,2.3 protocol.c,2.141,2.142
+Bugfix in resend file in compression mode,
+new functions compress_abort() and decompress_abort().
+
+2003/12/06 02:27:29 1.0a-306 gul
+client.c,2.51,2.52
+Coredump on exit cmgr with DEBUGCHILD
+
+2003/12/06 01:39:39 1.0a-305 gul
+inbound.c,2.25,2.26
+Bugfix on inb_done() with ND-mode
+
+2003/12/06 00:17:07 1.0a-304 stas
+Config.h,2.324,2.325
+Use own snprinf() and vsnprintf() instead MS VC RTL (buggy) implemetation
+
+2003/12/06 00:14:26 1.0a-303 stas
+snprintf.c,1.1,1.2
+Fix warnings (type conversions) at MS Visual C
+
+2003/12/02 21:32:29 1.0a-302 gul
+ftnq.c,2.28,2.29
+Prevent several clients calls to the same node
+
+2003/12/02 15:02:31 1.0a-301 gul
+setpttl.c,2.2,2.3
+Use own snprintf() instead of sprintf() if no HAVE_SNPRINTF
+
+2003/11/21 21:40:07 1.0a-300 stream
+btypes.h,2.1,2.2 ftnnode.c,2.25,2.26 ftnnode.h,2.15,2.16 readcfg.c,2.59,2.60
+Initial support for "-noproxy" node option
+
+2003/11/20 19:56:56 1.0a-299 gul
+bsy.c,2.9,2.10
+Delete empty zone outbound directories with "deletedirs"
+
+2003/11/20 18:21:21 1.0a-298 gul
+protocol.c,2.140,2.141
+Bugfix in sending ND-status with compression
+
+2003/11/19 20:07:24 1.0a-297 gul
+perlhooks.c,2.40,2.41
+Use foreach_node() for fill %node hash
+
+2003/11/17 03:03:31 1.0a-296 hbrew
+confopt.h,2.2,2.3 tools.c,2.56,2.57
+Fix BINKDW9X macro
+
+2003/11/09 05:45:50 1.0a-295 hbrew
+binkd.c,2.73,2.74
+Add -vv to help message
+
+2003/11/04 02:47:56 1.0a-294 hbrew
+confopt.h,2.1,2.2
+Cosmetic
+
+2003/11/04 02:46:54 1.0a-293 hbrew
+confopt.h,NONE,2.1 binkd.c,2.72,2.73
+confopt added.
+
+2003/10/30 13:11:34 1.0a-292 gul
+protocol.c,2.139,2.140
+Drop incoming session if secure remote AKA is busy
+
+2003/10/30 12:57:48 1.0a-291 gul
+inbound.c,2.24,2.25 inbound.h,2.5,2.6 perlhooks.c,2.39,2.40 perlhooks.h,2.7,2.8 protocol.c,2.138,2.139
+Change inb_done arguments, optimize a bit
+
+2003/10/30 12:37:06 1.0a-290 gul
+inbound.c,2.23,2.24 inbound.h,2.4,2.5 perlhooks.c,2.38,2.39 perlhooks.h,2.6,2.7 protocol.c,2.137,2.138
+Do not append file partially received from busy remote aka,
+non-destructive skip it.
+
+2003/10/29 23:09:13 1.0a-289 gul
+btypes.h,NONE,2.1 Config.h,2.307,2.308 binkd.c,2.71,2.72 binlog.c,2.9,2.10 branch.c,2.10,2.11 breaksig.c,2.4,2.5 bsy.c,2.8,2.9 client.c,2.50,2.51 exitproc.c,2.35,2.36 ftnaddr.c,2.7,2.8 ftnaddr.h,2.3,2.4 ftndom.c,2.3,2.4 ftndom.h,2.5,2.6 ftnnode.c,2.24,2.25 ftnnode.h,2.14,2.15 ftnq.c,2.27,2.28 ftnq.h,2.7,2.8 getw.c,2.6,2.7 getw.h,2.0,2.1 https.c,2.18,2.19 inbound.c,2.22,2.23 iptools.c,2.13,2.14 iptools.h,2.6,2.7 md5b.c,2.7,2.8 md5b.h,2.5,2.6 perlhooks.c,2.37,2.38 perlhooks.h,2.5,2.6 prothlp.c,2.5,2.6 prothlp.h,2.4,2.5 protoco2.h,2.16,2.17 protocol.c,2.136,2.137 readcfg.c,2.58,2.59 readcfg.h,2.26,2.27 readflo.c,2.4,2.5 readflo.h,2.3,2.4 run.c,2.5,2.6 server.c,2.36,2.37 srif.c,2.14,2.15 srif.h,2.3,2.4 tools.c,2.55,2.56 tools.h,2.23,2.24 xalloc.c,2.4,2.5 zlibdl.c,2.13,2.14
+Change include-files structure, relax dependences
+
+2003/10/29 23:08:45 1.0a-288 gul
+daemonize.c,2.6,2.7
+Change include-files structure, relax dependences
+
+2003/10/29 08:44:35 1.0a-287 stas
+service.c,2.43,2.44 brw32sig.h,2.6,NONE
+Remove unused header file
+
+2003/10/29 08:41:27 1.0a-286 stas
+service.c,2.42,2.43 service.h,2.13,2.14
+Remove unused types; small optimizes code
+
+2003/10/28 22:20:46 1.0a-285 stas
+tools.c,2.55,2.56
+Rewrite NT service code, remove obsoleted code and add some checks. Found a thread-not-safety problem.
+
+2003/10/28 22:20:20 1.0a-284 stas
+service.c,2.41,2.42 service.h,2.12,2.13 tray.c,2.3,2.4 w32tools.h,2.5,2.6
+Rewrite NT service code, remove obsoleted code and add some checks. Found a thread-not-safety problem.
+
+2003/10/28 15:38:46 1.0a-283 gul
+brw32sig.h,2.5,2.6
+Remove redundrant declaration
+
+2003/10/28 15:09:57 1.0a-282 gul
+exitproc.c,2.34,2.35
+Fix NT service semaphore usage in exitfunc()
+
+2003/10/28 01:23:55 1.0a-281 gul
+zlibdl.h,2.16,2.17
+Fix static ZLIB/BZLIB linking
+
+2003/10/28 01:22:57 1.0a-280 gul
+perlhooks.c,2.36,2.37 compress.h,2.1,2.2 zlibdl.c,2.12,2.13
+Fix OS/2 compilation
+
+2003/10/27 23:32:00 1.0a-279 gul
+perlhooks.c,2.35,2.36
+Autodetect perl version, fix warning
+
+2003/10/27 18:16:27 1.0a-278 gul
+perlhooks.c,2.34,2.35
+Fix warnings with perl58
+
+2003/10/24 21:18:44 1.0a-277 stas
+service.c,2.40,2.41 binkdres.rc,1.2,1.3
+use macro instead number; remove unused comparision
+
+2003/10/24 17:19:32 1.0a-276 val
+perlhooks.c,2.33,2.34
+missing OS/2 code for PERLDL improvements added
+
+2003/10/24 09:41:13 1.0a-275 val
+zlibdl.h,2.15,2.16
+ZLIBDL fix to restore linking with MSVC (bzlib2 still crashes)
+
+2003/10/24 09:40:16 1.0a-274 val
+perlhooks.c,2.32,2.33
+PERLDL support for both Perl 5.6 and 5.8 versions
+
+2003/10/24 09:38:44 1.0a-273 val
+protocol.c,2.135,2.136
+fix warning
+
+2003/10/24 00:39:23 1.0a-272 gul
+readcfg.c,2.57,2.58
+Remove C++ style comments
+
+2003/10/24 00:38:56 1.0a-271 gul
+breaksig.c,2.21,2.22
+Remove C++ style comments
+
+2003/10/24 00:16:12 1.0a-270 gul
+zlibdl.h,2.14,2.15
+Fix MSVC bzlib2 ZLIBDL compilation
+
+2003/10/23 19:45:36 1.0a-269 gul
+zlibdl.h,2.13,2.14
+Fix win32 zlibdl compilation
+
+2003/10/23 19:36:27 1.0a-268 gul
+zlibdl.h,2.12,2.13
+Fix warning
+
+2003/10/22 17:24:55 1.0a-267 stas
+Config.h,2.285,2.286 perlhooks.c,2.31,2.32
+Remove obsolete defines
+
+2003/10/21 21:17:22 1.0a-266 stas
+tray.c,2.2,2.3
+Log message 'Icon for systray is loaded from <file>'
+
+2003/10/20 23:27:10 1.0a-265 gul
+binkd.c,2.70,2.71
+format output
+
+2003/10/20 22:17:59 1.0a-264 gul
+binkd.c,2.69,2.70 !README.FIX,2.35,2.36 todo.lst,2.40,2.41
+Print optional compiled-in extensions by -vv command-line switch
+
+2003/10/20 21:44:55 1.0a-263 gul
+protocol.c,2.134,2.135
+Inhibit incorrect error message
+
+2003/10/20 21:24:12 1.0a-262 gul
+protocol.c,2.133,2.134
+Compression bugfix
+
+2003/10/20 21:04:49 1.0a-261 gul
+zlibdl.c,2.11,2.12
+Previous patch break OS/2 compilation. Fixed.
+
+2003/10/20 20:57:16 1.0a-260 gul
+zlibdl.c,2.10,2.11
+Dynamic load bzlib.dll built as C++
+
+2003/10/20 18:44:33 1.0a-259 gul
+zlibdl.h,2.11,2.12
+Declare DLL functions as WINAPI
+
+2003/10/20 15:23:59 1.0a-258 gul
+Config.h,2.275,2.276
+Split MYVER for future WINVER set
+
+2003/10/20 15:20:20 1.0a-257 gul
+Config.h,2.273,2.274
+Fix DOS compilation
+
+2003/10/20 15:08:12 1.0a-256 gul
+perlhooks.c,2.30,2.31
+Minor bugfix in perl error handling under win32
+
+2003/10/20 01:44:19 1.0a-255 gul
+protocol.c,2.132,2.133 tools.h,2.22,2.23 xalloc.c,2.3,2.4
+Add xstrcat(), use dynamic strings for OPT
+
+2003/10/20 01:02:40 1.0a-254 gul
+zlibdl.c,2.9,2.10
+OS/2 ZLIBDL fix
+
+2003/10/19 15:22:22 1.0a-253 gul
+compress.c,NONE,2.1 compress.h,NONE,2.1 binkd.c,2.68,2.69 binkd.cfg,2.34,2.35 perlhooks.c,2.29,2.30 protoco2.h,2.15,2.16 protocol.c,2.131,2.132 readcfg.c,2.56,2.57 readcfg.h,2.25,2.26 zlibdl.c,2.8,2.9 zlibdl.h,2.10,2.11
+Stream compression
+
+2003/10/19 13:28:12 1.0a-252 gul
+server.c,2.35,2.36
+Minor DEBUGCHILD fix
+
+2003/10/19 07:41:20 1.0a-251 hbrew
+tray.c,2.1,2.2 tray.h,2.1,2.2
+'\r\n' --> '\n'
+
+2003/10/18 21:53:53 1.0a-250 stas
+service.c,2.39,2.40
+remove unused variable
+
+2003/10/18 21:51:19 1.0a-249 stas
+binkd.c,2.67,2.68 tools.c,2.54,2.55
+Move to new 'tray.c' file several functions when is related with 'minimize to tray' feature
+
+2003/10/18 21:50:51 1.0a-248 stas
+tray.c,NONE,2.1 tray.h,NONE,2.1 service.c,2.38,2.39 service.h,2.11,2.12 w32tools.c,2.9,2.10 w32tools.h,2.4,2.5
+Move to new 'tray.c' file several functions when is related with 'minimize to tray' feature
+
+2003/10/18 20:02:32 1.0a-247 stas
+w32tools.c,2.8,2.9
+Don't set '-S name' option to NT service parameters list in registry
+
+2003/10/18 18:59:09 1.0a-246 stas
+binkd.c,2.66,2.67
+Improve logging (report about loading dlls)
+
+2003/10/18 09:45:55 1.0a-245 stas
+exitproc.c,2.33,2.34
+Fix a semaphore usage in exitfunc()
+
+2003/10/18 09:45:25 1.0a-244 stas
+service.c,2.37,2.38 service.h,2.10,2.11
+Fix a semaphore usage in exitfunc()
+
+2003/10/17 21:49:39 1.0a-243 stas
+exitproc.c,2.32,2.33
+Use a semaphore to prevent double run exitfunc()
+
+2003/10/17 07:20:32 1.0a-242 hbrew
+breaksig.c,2.20,2.21
+Fix binkd9x atexit()
+
+2003/10/14 18:34:42 1.0a-241 stas
+service.c,2.36,2.37
+Fix MS Visual C build
+
+2003/10/14 14:37:49 1.0a-240 gul
+protocol.c,2.130,2.131
+Fix typo
+
+2003/10/14 10:34:30 1.0a-239 gul
+protocol.c,2.129,2.130 tools.c,2.53,2.54 tools.h,2.21,2.22
+Use getwordx() for parse optional M_FILE params
+
+2003/10/14 10:20:42 1.0a-238 gul
+readcfg.h,2.24,2.25
+Fixed typo
+
+2003/10/13 11:48:42 1.0a-237 stas
+exitproc.c,2.31,2.32
+Implement true NT service stop sequence
+
+2003/10/13 11:48:13 1.0a-236 stas
+breaksig.c,2.19,2.20 service.c,2.35,2.36
+Implement true NT service stop sequence
+
+2003/10/12 15:58:43 1.0a-235 gul
+protocol.c,2.128,2.129
+No changes ;)
+
+2003/10/11 20:31:30 1.0a-234 stas
+breaksig.c,2.18,2.19
+cosmetics (indent nt/breaksig.c)
+
+2003/10/11 11:41:48 1.0a-233 gul
+readcfg.c,2.55,2.56
+stricmp() -> STRICMP()
+
+2003/10/11 09:54:58 1.0a-232 stas
+readcfg.c,2.54,2.55
+ifcico/qico passwords file support
+
+2003/10/10 08:30:20 1.0a-231 stas
+service.c,2.34,2.35
+Initialize variable (fix)
+
+2003/10/09 20:26:17 1.0a-230 stas
+service.c,2.33,2.34
+Unload icon after use (if loaded from file)
+
+2003/10/09 20:14:05 1.0a-229 stas
+service.c,2.32,2.33
+Load tray icon from file "binkd.ico"
+
+2003/10/09 12:41:10 1.0a-228 stas
+breaksig.c,2.17,2.18 service.c,2.31,2.32 service.h,2.9,2.10
+Change service stop sequence
+
+2003/10/08 14:10:56 1.0a-227 stas
+breaksig.c,2.16,2.17
+remove illegal call
+
+2003/10/08 13:30:37 1.0a-226 gul
+exitproc.c,2.30,2.31
+Fixed debug logging (thx to Alexander Reznikov)
+
+2003/10/08 08:48:59 1.0a-225 stas
+breaksig.c,2.15,2.16
+Fix w9x compilation
+
+2003/10/07 23:54:49 1.0a-224 gul
+client.c,2.49,2.50
+End clientmgr by _endthread() on break
+(patch by Alexander Reznikov).
+
+2003/10/07 23:50:11 1.0a-223 gul
+client.c,2.48,2.49 exitproc.c,2.29,2.30 server.c,2.34,2.35
+Wait for servmanager exit from exitproc()
+(Patch from Alexander Reznikov)
+
+2003/10/07 21:03:22 1.0a-222 stas
+service.c,2.30,2.31
+Fix error with MS VC. Thanks to Serguei Trouchelle <stro@isd.dp.ua>
+
+2003/10/07 20:57:12 1.0a-221 gul
+client.c,2.47,2.48 exitproc.c,2.28,2.29 iptools.c,2.12,2.13 protocol.c,2.127,2.128 server.c,2.33,2.34
+Some small changes in close threads function.
+Inhibit errors "socket operation on non-socket" on break.
+
+2003/10/07 18:30:19 1.0a-220 gul
+perlhooks.c,2.28,2.29
+Fix warnings
+
+2003/10/07 17:41:07 1.0a-219 stas
+breaksig.c,2.14,2.15 brw32sig.h,2.4,2.5 service.c,2.29,2.30 service.h,2.8,2.9
+Fix NT service shutdown
+
+2003/10/06 22:00:01 1.0a-218 stas
+breaksig.c,2.13,2.14 brw32sig.h,2.3,2.4 service.c,2.28,2.29
+Prevent double calls of ReportStatusToSCMgr(SERVICE_STOPPED,...) and double restart service
+
+2003/10/06 20:53:18 1.0a-217 stas
+breaksig.c,2.12,2.13 win9x.c,2.24,2.25
+(Prevent compiler warning.) Remove type convertion at CreateWin9xThread() call
+
+2003/10/06 20:42:29 1.0a-216 stas
+breaksig.c,2.11,2.12 brw32sig.h,2.2,2.3 service.c,2.27,2.28
+(Prevent compiler warning.) Remove type convertion at SetConsoleCtrlHandler() call
+
+2003/10/06 20:17:19 1.0a-215 stas
+iphdr.h,2.15,2.16
+(Cosmetics) Rename tcperr() to w32err() for win32/win9x versions
+
+2003/10/06 20:16:50 1.0a-214 stas
+TCPErr.c,2.13,2.14 service.c,2.26,2.27 w32tools.c,2.7,2.8
+(Cosmetics) Rename tcperr() to w32err() for win32/win9x versions
+
+2003/10/06 20:03:40 1.0a-213 stas
+service.c,2.25,2.26
+Fix logic of checkservice()
+
+2003/10/06 20:01:37 1.0a-212 stas
+service.c,2.24,2.25
+Fix "we're running as a service" test
+
+2003/10/06 19:54:53 1.0a-211 stas
+service.c,2.23,2.24
+(Prevent warnings.) Prepare to implement full service control
+
+2003/10/06 19:50:24 1.0a-210 stas
+service.h,2.7,2.8
+Drop excessive numeric values of enumeration in parameter and return values of service_main()
+
+2003/10/06 19:47:31 1.0a-209 stas
+service.c,2.22,2.23 service.h,2.6,2.7
+Use enumeration in parameter and return values of service_main()
+
+2003/10/06 11:25:32 1.0a-208 val
+zlibdl.c,2.7,2.8
+turn off optimization for zlibdl.c
+
+2003/10/06 09:30:38 1.0a-207 val
+binkd.cfg,2.27,2.28 zlibdl.c,2.6,2.7
+zlib code fix
+
+2003/10/05 18:06:39 1.0a-206 hbrew
+dirent.h,1.1,1.2 getfree.c,1.1,1.2
+'\r\n' --> '\n'
+
+2003/10/05 17:48:26 1.0a-205 hbrew
+brw32sig.h,2.1,2.2
+'\r\n' --> '\n'
+
+2003/10/05 13:01:17 1.0a-204 stas
+service.c,2.21,2.22
+Remove unused code
+
+2003/10/05 12:38:15 1.0a-203 stas
+binkd.c,2.65,2.66 common.h,2.10,2.11 tools.c,2.52,2.53
+Optimize binkd/nt start: use hack to determine if we're running as a service without waiting for the service control manager to fail
+
+2003/10/05 12:37:45 1.0a-202 stas
+service.c,2.20,2.21 service.h,2.5,2.6
+Optimize binkd/nt start: use hack to determine if we're running as a service without waiting for the service control manager to fail
+
+2003/10/05 10:37:49 1.0a-201 stas
+brw32sig.h,NONE,2.1 breaksig.c,2.10,2.11 service.c,2.19,2.20
+Fix NT service exit (don't hang service on receive CTRL_SERVICESTOP_EVENT)
+
+2003/10/05 07:59:13 1.0a-200 stas
+service.c,2.18,2.19
+Fix service handler function definition; get service name from OS
+
+2003/10/04 23:47:28 1.0a-199 gul
+branch.c,2.9,2.10
+New configure --with-debug=nofork option, DEBUGCHILD macro
+
+2003/10/04 22:25:13 1.0a-198 gul
+!README,2.2,2.3 !README.FIX,2.32,2.33 Config.h,2.213,2.214 binkdfaq.txt.en,1.7,1.8 binkdfaq.txt.ru,1.8,1.9
+Change version 0.9.6a -> 1.0a
+
+2003/10/04 03:46:58 0.9.6a-197 hbrew
+perlhooks.c,2.27,2.28
+Avoid warning in perl.h
+
+2003/10/03 16:30:31 0.9.6a-196 val
+zlibdl.h,2.9,2.10
+fix for older bzlib2 error (uses FILE but doesn't include stdio.h)
+
+2003/09/25 12:01:30 0.9.6a-195 gul
+zlibdl.h,2.8,2.9
+Fix CVS macro again
+
+2003/09/25 09:41:46 0.9.6a-194 val
+protoco2.h,2.14,2.15 zlibdl.c,2.5,2.6 zlibdl.h,2.7,2.8
+fix compilation under win32
+
+2003/09/25 01:14:10 0.9.6a-193 hbrew
+zlibdl.h,2.6,2.7
+Fix cvs macro
+
+2003/09/24 12:53:20 0.9.6a-192 val
+zlibdl.c,2.4,2.5 zlibdl.h,2.5,2.6
+fix warnings
+
+2003/09/24 10:39:53 0.9.6a-191 val
+tools.h,2.20,2.21
+fix warning
+
+2003/09/24 10:32:52 0.9.6a-190 val
+binkd.c,2.64,2.65 binkd.cfg,2.24,2.25 perlhooks.c,2.26,2.27 protoco2.h,2.13,2.14 protocol.c,2.126,2.127 readcfg.c,2.53,2.54 readcfg.h,2.23,2.24 zlibdl.c,2.3,2.4 zlibdl.h,2.4,2.5
+bzlib2 compression support, new compression keyword: zlevel
+
+2003/09/24 01:02:39 0.9.6a-189 gul
+zlibdl.h,2.3,2.4
+Fix warning
+
+2003/09/22 14:38:50 0.9.6a-188 val
+protocol.c,2.125,2.126
+new ip checking modes in VAL_STYLE: ipNoUnknown, ipNoError;
+val's and gul's -ip modes can be used per node as ipRelaxed and ipResolved
+(lacks readcfg support still)
+
+2003/09/22 12:54:44 0.9.6a-187 gul
+client.c,2.46,2.47 protocol.c,2.124,2.125 tools.c,2.51,2.52
+Screen output semaphoring, prevent mixing output from threads
+
+2003/09/21 20:51:11 0.9.6a-186 gul
+binkd.c,2.63,2.64 branch.c,2.8,2.9 client.c,2.45,2.46 perlhooks.c,2.25,2.26 server.c,2.32,2.33 sys.h,2.14,2.15
+Fixed PID in logfile for perl stderr handled messages in fork version.
+
+2003/09/21 20:34:29 0.9.6a-185 gul
+client.c,2.44,2.45 common.h,2.9,2.10 perlhooks.c,2.24,2.25 reapchld.inc,2.2,2.3 tools.c,2.50,2.51
+Change perl stderr handling for thread vertions,
+some small changes.
+
+2003/09/19 16:54:32 0.9.6a-184 gul
+protocol.c,2.123,2.124
+undef VAL_STYLE ip check by default
+
+2003/09/19 16:37:16 0.9.6a-183 val
+ftnnode.c,2.23,2.24
+old get_defnode_info() logic returned for a while
+
+2003/09/19 15:52:59 0.9.6a-182 val
+protocol.c,2.122,2.123
+fix bug with not sending GZ parameter to M_FILE after M_GET
+
+2003/09/18 10:18:23 0.9.6a-181 val
+perlhooks.c,2.23,2.24
+fix to assure dll has been loaded before calling perl funcs
+
+2003/09/17 10:05:18 0.9.6a-180 val
+protocol.c,2.121,2.122
+Cosmetics and comment on #define VAL_STYLE
+
+2003/09/16 09:38:46 0.9.6a-179 val
+ftnnode.c,2.22,2.23 protocol.c,2.120,2.121
+correct IP checking algorithms (gul's one is buggy), correct get_defnode_info()
+
+2003/09/16 00:10:12 0.9.6a-178 gul
+protocol.c,2.119,2.120
+Fix remote IP check logic
+
+2003/09/15 09:57:11 0.9.6a-177 val
+!README.FIX,2.31,2.32 !README.perl,2.3,2.4 binkd.cfg,2.23,2.24 perlhooks.c,2.22,2.23 protoco2.h,2.12,2.13 protocol.c,2.118,2.119 readcfg.c,2.52,2.53 readcfg.h,2.22,2.23 zlibdl.c,2.2,2.3 zlibdl.h,2.2,2.3
+compression support via zlib: config keywords, improvements, OS/2 code
+
+2003/09/14 15:29:33 0.9.6a-176 gul
+ftnnode.c,2.21,2.22
+Optimize a bit
+
+2003/09/12 12:10:11 0.9.6a-175 val
+protoco2.h,2.11,2.12 protocol.c,2.117,2.118 zlibdl.c,2.1,2.2 zlibdl.h,2.1,2.2
+zlib compression support and configure for unix (my first try to write
+autoconf script, i hope it works on your system ;-)
+
+2003/09/12 10:38:30 0.9.6a-174 val
+zlibdl.c,NONE,2.1 zlibdl.h,NONE,2.1 binkd.c,2.62,2.63 protoco2.h,2.10,2.11 protocol.c,2.116,2.117 readcfg.c,2.51,2.52 readcfg.h,2.21,2.22
+compression support via zlib (preliminary)
+
+2003/09/11 16:04:45 0.9.6a-173 hbrew
+exitproc.c,2.27,2.28
+Undo 'move binkd9x deinit to exitfunc()' patch
+
+2003/09/11 16:04:16 0.9.6a-172 hbrew
+win9x.c,2.23,2.24 win9x.h,2.5,2.6
+Undo 'move binkd9x deinit to exitfunc()' patch
+
+2003/09/11 15:23:27 0.9.6a-171 hbrew
+win9x.c,2.22,2.23
+Fix 'suggest parentheses around assignment used as truth value'.
+
+2003/09/11 11:26:13 0.9.6a-170 val
+perlhooks.c,2.21,2.22
+fix for Perl hooks code after steam's patch for pNodArray
+
+2003/09/09 20:57:45 0.9.6a-169 stream
+exitproc.c,2.26,2.27
+Do not unload config on exit (considered useless and potentially unstable)
+
+2003/09/08 20:05:44 0.9.6a-168 stream
+srif.c,2.13,2.14
+Big memory leak in evt_queue()
+
+2003/09/08 19:39:41 0.9.6a-167 stream
+ftnnode.c,2.20,2.21 ftnnode.h,2.13,2.14 ftnq.c,2.26,2.27 protocol.c,2.115,2.116 readcfg.c,2.50,2.51 readcfg.h,2.20,2.21
+Fixed race conditions when accessing array of nodes in threaded environment
+("jumpimg node structures")
+
+2003/09/08 11:21:22 0.9.6a-166 stream
+exitproc.c,2.25,2.26 ftnnode.c,2.19,2.20 readcfg.c,2.49,2.50
+Cleanup config semaphore, free memory of base config on exit.
+
+2003/09/08 09:36:53 0.9.6a-165 val
+exitproc.c,2.24,2.25 perlhooks.c,2.20,2.21
+(a) don't call exitfunc for perlhook fork'ed process
+(b) many compilation warnings in perlhooks.c fixed
+
+2003/09/07 07:50:13 0.9.6a-164 hbrew
+exitproc.c,2.23,2.24
+Remove binkd9x restart-on-config-change code; move binkd9x deinit to exitfunc()
+
+2003/09/07 07:49:43 0.9.6a-163 hbrew
+win9x.c,2.21,2.22 win9x.h,2.4,2.5
+Remove binkd9x restart-on-config-change code; move binkd9x deinit to exitfunc()
+
+2003/09/07 07:39:18 0.9.6a-162 hbrew
+win9x.c,2.20,2.21
+Memory leak (binkd9x service startup)
+
+2003/09/07 07:37:05 0.9.6a-161 hbrew
+win9x.c,2.19,2.20
+Close process and thread handles after CreateProcess()
+
+2003/09/07 07:35:18 0.9.6a-160 hbrew
+win9x.c,2.18,2.19
+Fix old noncritical bug in binkd9x (STD_OUTPUT_HANDLE --> STD_INPUT_HANDLE)
+
+2003/09/05 13:17:22 0.9.6a-159 gul
+ftnq.c,2.25,2.26 ftnq.h,2.6,2.7 protocol.c,2.114,2.115
+Send argus-compatible freqs.
+Warning: works only with prescan!
+
+2003/09/05 12:57:19 0.9.6a-158 gul
+protocol.c,2.113,2.114
+Process multiply M_NUL FREQ messages
+
+2003/09/05 11:34:00 0.9.6a-157 gul
+https.c,2.17,2.18
+Fix work with proxy under OS/2
+
+2003/09/05 11:15:56 0.9.6a-156 gul
+branch.c,2.7,2.8
+Make DEBUG-version single-thread
+
+2003/09/05 09:49:08 0.9.6a-155 val
+binkd.c,2.61,2.62 client.c,2.43,2.44 perlhooks.c,2.19,2.20 perlhooks.h,2.4,2.5 protocol.c,2.112,2.113 server.c,2.31,2.32
+Perl support restored after config reloading patch
+
+2003/09/05 09:44:07 0.9.6a-154 val
+protocol.c,2.111,2.112
+Argus-style freq's (M_NUL FREQ) support, not tested yet
+
+2003/08/30 19:38:56 0.9.6a-153 gul
+win9x.c,2.17,2.18
+Fix compilation warnings
+
+2003/08/29 16:27:37 0.9.6a-152 gul
+protocol.c,2.110,2.111
+Do not save zero-length .dt files
+
+2003/08/28 10:35:57 0.9.6a-151 gul
+inbound.c,2.21,2.22
+Cosmetics in log
+
+2003/08/28 04:28:56 0.9.6a-150 hbrew
+binkd.c,2.60,2.61
+Fix typo
+
+2003/08/27 01:19:23 0.9.6a-149 gul
+WSock.c,2.2,2.3 getfree.c,2.5,2.6 sem.c,2.7,2.8 service.c,2.17,2.18 w32tools.c,2.6,2.7
+Fix compilation under w32-mingw and os2-emx
+
+2003/08/27 01:18:51 0.9.6a-148 gul
+sem.c,2.4,2.5
+Fix compilation under w32-mingw and os2-emx
+
+2003/08/27 00:01:42 0.9.6a-147 gul
+binkd.c,2.58,2.59 branch.c,2.6,2.7 breaksig.c,2.3,2.4 bsy.c,2.6,2.7 client.c,2.42,2.43 ftnaddr.c,2.6,2.7 ftnnode.c,2.18,2.19 ftnq.c,2.23,2.24 getw.c,2.5,2.6 https.c,2.16,2.17 inbound.c,2.19,2.20 iptools.c,2.11,2.12 prothlp.c,2.4,2.5 protocol.c,2.108,2.109 readcfg.c,2.47,2.48 readflo.c,2.3,2.4 run.c,2.4,2.5 server.c,2.29,2.30 srif.c,2.12,2.13 tools.c,2.48,2.49
+Fix compilation under unix
+
+2003/08/27 00:01:13 0.9.6a-146 gul
+daemonize.c,2.5,2.6
+Fix compilation under unix
+
+2003/08/26 21:18:53 0.9.6a-145 gul
+binkd.c,2.57,2.58
+Process "-?" commandline switch as "-h"
+
+2003/08/26 20:01:28 0.9.6a-144 gul
+perlhooks.c,2.18,2.19
+Correct previous patch
+
+2003/08/26 19:46:25 0.9.6a-143 gul
+perlhooks.c,2.17,2.18
+binkd/2 perl dynamic DLL load
+
+2003/08/26 19:06:59 0.9.6a-142 stream
+Config.h,2.155,2.156 binkd.c,2.56,2.57 binlog.c,2.8,2.9 binlog.h,2.1,2.2 branch.c,2.5,2.6 breaksig.c,2.2,2.3 bsy.c,2.5,2.6 bsy.h,2.1,2.2 client.c,2.41,2.42 common.h,2.8,2.9 exitproc.c,2.21,2.22 ftnaddr.c,2.5,2.6 ftnaddr.h,2.2,2.3 ftndom.c,2.2,2.3 ftndom.h,2.4,2.5 ftnnode.c,2.17,2.18 ftnnode.h,2.12,2.13 ftnq.c,2.22,2.23 ftnq.h,2.5,2.6 https.c,2.15,2.16 https.h,2.2,2.3 inbound.c,2.18,2.19 inbound.h,2.3,2.4 iphdr.h,2.14,2.15 iptools.c,2.10,2.11 iptools.h,2.5,2.6 md5b.c,2.6,2.7 md5b.h,2.4,2.5 prothlp.c,2.3,2.4 prothlp.h,2.3,2.4 protoco2.h,2.9,2.10 protocol.c,2.107,2.108 protocol.h,2.2,2.3 readcfg.c,2.46,2.47 readcfg.h,2.19,2.20 readflo.c,2.2,2.3 readflo.h,2.2,2.3 sem.h,2.10,2.11 server.c,2.28,2.29 server.h,2.2,2.3 srif.c,2.11,2.12 srif.h,2.2,2.3 tools.c,2.47,2.48 tools.h,2.19,2.20 xalloc.c,2.1,2.2
+Reload configuration on-the fly.
+
+Warning! Lot of code can be broken (Perl for sure). 
+Compilation checked only under OS/2-Watcom and NT-MSVC (without Perl)
+
+2003/08/26 19:06:29 0.9.6a-141 stream
+breaksig.c,2.9,2.10
+Reload configuration on-the fly.
+
+Warning! Lot of code can be broken (Perl for sure). 
+Compilation checked only under OS/2-Watcom and NT-MSVC (without Perl)
+
+2003/08/26 17:36:50 0.9.6a-140 gul
+perlhooks.c,2.16,2.17 binkd.c,2.55,2.56
+Perl hooks in os2-emx
+
+2003/08/26 10:43:57 0.9.6a-139 stream
+perlhooks.c,2.15,2.16
+Use generic lists
+
+2003/08/25 22:09:32 0.9.6a-138 gul
+protocol.c,2.106,2.107
+Flush file buffer after receive data frame,
+drop session if extra bytes received.
+
+2003/08/25 21:25:36 0.9.6a-137 gul
+inbound.c,2.17,2.18
+Remove partial if received part more then total size
+
+2003/08/25 17:09:06 0.9.6a-136 gul
+perlhooks.c,2.14,2.15
+Added exp_ftnaddress() to refresh_queue()
+
+2003/08/25 07:42:51 0.9.6a-134  gul
+Add OS/2 EMX multithread version
+
+2003/08/25 06:11:08 0.9.6a-133 gul
+Fix compilation with HAVE_FORK
+
+2003/08/25 05:39:28 0.9.6a-132 stas
+Bugfix: "readcfg.c:938: `fa\' undeclared" compilation error
+
+2003/08/24 19:42:11 0.9.6a-131 gul
+Get FTN-domain from matched zone in exp_ftnaddress()
+
+2003/08/24 18:54:32 0.9.6a-130 gul
+Bugfix in timeout check on win32
+
+2003/08/24 18:06:01 0.9.6a-129 hbrew
+Update for previous patch
+
+2003/08/24 17:28:33 0.9.6a-128 hbrew
+Fix work with sighandler on win32
+
+2003/08/24 16:55:10 0.9.6a-127 hbrew
+Fix memory allocation for polls
+
+2003/08/24 13:30:35 0.9.6a-126 stream
+Socket wasn't closed if branch() failed
+
+2003/08/24 01:36:02 0.9.6a-125 hbrew
+Update for previous patch
+
+2003/08/24 00:45:48 0.9.6a-124 hbrew
+win9x-select-workaround fix, thanks to Pavel Gulchouck
+
+2003/08/23 15:51:52 0.9.6a-123 stream
+Implemented common list routines for all linked records in configuration
+
+2003/08/22 09:41:38 0.9.6a-122 val
+add check perl!=NULL in perl_on_handshake
+
+2003/08/22 09:37:41 0.9.6a-121 val
+missing function import for PERLDL: sv_setpvn()
+
+2003/08/21 15:41:06 0.9.6a-120 gul
+Change building commandline for service under win32
+(patch by Alexander Reznikov)
+
+2003/08/21 15:40:37 0.9.6a-119 gul
+Change building commandline for service under win32
+(patch by Alexander Reznikov)
+
+2003/08/21 07:24:42 0.9.6a-118 gul
+Use local buffer in Log() with HAVE_FORK
+
+2003/08/20 07:33:40 0.9.6a-117 hbrew
+Addon for 'Avoid double exitfunc() call' patch
+
+2003/08/19 19:41:41 0.9.6a-116 gul
+Fix warnings
+
+2003/08/19 18:08:10 0.9.6a-115 gul
+Avoid double exitfunc() call
+
+2003/08/19 18:01:09 0.9.6a-114 stream
+Fix unix compilation
+
+2003/08/19 10:16:13 0.9.6a-113 gul
+Rename trunc() -> trunc_file() due to conflict under OS/2 EMX
+
+2003/08/19 10:13:17 0.9.6a-112 gul
+Change Log() semaphoring
+
+2003/08/18 17:19:14 0.9.6a-111 stream
+Partially implemented new configuration parser logic (required for config reload)
+
+2003/08/18 15:44:53 0.9.6a-110 stream
+New function last_slash(): Return pointer to last directory separator
+in file name, or NULL if no path present.
+
+2003/08/18 09:41:03 0.9.6a-109 gul
+Little cleanup in handle perl errors
+
+2003/08/18 09:15:41 0.9.6a-108 gul
+Cosmetics
+
+2003/08/18 08:23:05 0.9.6a-107 gul
+Return log semaphoring
+
+2003/08/18 07:35:11 0.9.6a-106 val
+multiple changes:
+- hide-aka/present-aka logic
+- address mask matching via pmatch
+- delay_ADR in STATE (define DELAY_ADR removed)
+- ftnaddress_to_str changed to xftnaddress_to_str (old version #define'd)
+- parse_ftnaddress now sets zone to domain default if it's omitted
+
+2003/08/18 07:29:41 0.9.6a-105 val
+multiple changes:
+- perl error handling made via fork/thread
+- on_log() perl hook
+- perl: msg_send(), on_send(), on_recv()
+- unless using threads define log buffer via xalloc()
+
+2003/08/17 19:07:12 0.9.6a-104 gul
+Fix typo
+
+2003/08/17 10:38:57 0.9.6a-103 gul
+Return semaphoring for log and binlog
+
+2003/08/17 08:12:07 0.9.6a-102 gul
+Fix typo
+
+2003/08/16 09:47:27 0.9.6a-101 gul
+Autodetect tzoff if not specified
+
+2003/08/16 09:08:35 0.9.6a-100 gul
+Binlog semaphoring removed
+
+2003/08/16 06:21:14 0.9.6a-99 gul
+Log() semaphoring removed
+
+2003/08/15 08:48:52 0.9.6a-98 gul
+Compilation error fixed
+
+2003/08/14 14:19:39 0.9.6a-97 gul
+Drop remote AKA with another password on outgoing sessions
+
+2003/08/14 12:56:31 0.9.6a-96 gul
+Make Log() thread-safe
+
+2003/08/14 11:43:21 0.9.6a-95 val
+free allocated log buffer in exitfunc()
+
+2003/08/14 08:29:24 0.9.6a-94 gul
+Use snprintf() from sprintf.c if no such libc function
+
+2003/08/14 07:42:40 0.9.6a-93 val
+vsnprintf() function, taken from libsasl sources
+
+2003/08/14 07:40:08 0.9.6a-92 val
+migrate from vfprintf() to vsnprintf() in Log(), new keyword `nolog'
+
+2003/08/14 07:39:36 val
+migrate from vfprintf() to vsnprintf() in Log(), new keyword `nolog'
+
+2003/08/13 11:59:23 0.9.6a-91 gul
+Undo my prev patch, sorry ;)
+
+2003/08/13 11:49:07 0.9.6a-90 gul
+correct previous fix
+
+2003/08/13 11:35:28 0.9.6a-89 hbrew
+Fix warning.
+
+2003/08/13 08:20:47 0.9.6a-88 val
+try to avoid mixing Log() output and Perl errors in stderr
+
+2003/08/13 08:02:53 0.9.6a-87 val
+define DELAY_ADR ifdef WITH_PERL (todo: provide more flexible logic)
+
+2003/08/12 09:35:50 0.9.6a-86 gul
+Cosmetics
+
+2003/08/12 09:31:47 0.9.6a-85 val
+don't strlower() mask in flag/exec since we now use pmatch_ncase()
+
+2003/08/12 09:23:03 0.9.6a-84 val
+migrate from pmatch() to pmatch_ncase()
+
+2003/08/11 08:36:43 0.9.6a-83 gul
+workaround winsock bug
+
+2003/08/11 08:33:18 0.9.6a-82 val
+better error handling in perl hooks
+
+2003/08/05 05:36:16 0.9.6a-81 hbrew
+'static const char rcsid[]' removed
+
+2003/08/04 12:23:42 0.9.6a-80 gul
+Add CVS tags
+
+2003/08/04 12:17:51 0.9.6a-79 gul
+Remove extra error message
+
+2003/08/04 12:12:28 0.9.6a-78 gul
+Add opterr and optopt vars
+
+2003/07/30 11:01:39 0.9.6a-77 val
+perl-dll keyword can be used even when PERLDL is not defined (does nothing)
+
+2003/07/28 10:24:07 0.9.6a-76 val
+Perl DLL dynamic load for Win32, config keyword perl-dll, nmake PERLDL=1
+
+2003/07/19 07:00:08 0.9.6a-75 hbrew
+Complex patch:
+* nt/w32tools.c: Fix warnings
+* nt/w32tools.c: Fix typo in #ifdef
+* nt/win9x.c: Fix type in #include
+* Config.h, sys.h, branch.c, nt/service.c,
+    nt/win9x.c, : _beginthread()-->BEGINTHREAD()
+* binkd.c, common.h, mkfls/nt95-msvc/Makefile.dep,
+    nt/service.c, nt/w32tools.c,nt/win9x.c: cosmitic code cleanup
+
+2003/07/19 06:59:37 0.9.6a-74 hbrew
+Complex patch:
+* nt/w32tools.c: Fix warnings
+* nt/w32tools.c: Fix typo in #ifdef
+* nt/win9x.c: Fix type in #include
+* Config.h, sys.h, branch.c, nt/service.c,
+    nt/win9x.c, : _beginthread()-->BEGINTHREAD()
+* binkd.c, common.h, mkfls/nt95-msvc/Makefile.dep,
+    nt/service.c, nt/w32tools.c,nt/win9x.c: cosmitic code cleanup
+
+2003/07/19 06:59:34 hbrew
+Complex patch:
+* nt/w32tools.c: Fix warnings
+* nt/w32tools.c: Fix typo in #ifdef
+* nt/win9x.c: Fix type in #include
+* Config.h, sys.h, branch.c, nt/service.c,
+    nt/win9x.c, : _beginthread()-->BEGINTHREAD()
+* binkd.c, common.h, mkfls/nt95-msvc/Makefile.dep,
+    nt/service.c, nt/w32tools.c,nt/win9x.c: cosmitic code cleanup
+
+2003/07/19 04:26:09 0.9.6a-73 hbrew
+'\r\n' --> '\n'
+
+2003/07/18 14:56:37 0.9.6a-72 stas
+Use description of win2000/XP services
+
+2003/07/18 13:44:34 0.9.6a-71 stas
+Difference NT service internal name and display name
+
+2003/07/18 12:36:01 0.9.6a-70 stas
+Remove old code; add some checks; use new option '--service' for win9x
+
+2003/07/18 10:31:06 0.9.6a-69 stas
+New functions: IsNT(), Is9x(); small code cleanup
+
+2003/07/18 10:30:36 0.9.6a-68 stas
+New functions: IsNT(), Is9x(); small code cleanup
+
+2003/07/18 07:48:59 0.9.6a-67 hbrew
+binkd9x: Store current dir in registry
+
+2003/07/18 04:15:08 0.9.6a-66 hbrew
+Fix 'tell_start_ntservice(): {120} ...' error on Win9x
+
+2003/07/17 04:32:18 0.9.6a-65 hbrew
+Fix "No prototype found for 'isdigit'" warning.
+
+2003/07/17 03:08:23 0.9.6a-64 hbrew
+Fix uninstall of binkd9x service
+
+2003/07/17 02:53:07 0.9.6a-63 hbrew
+Fix MSVC warnings & errors
+
+2003/07/17 02:42:20 0.9.6a-62 hbrew
+Compability with nt/service.c & nt/win9x.c.
+Usage "--service" options as win9x "run-as-service" flag.
+
+2003/07/17 02:41:51 0.9.6a-61 hbrew
+Compability with nt/service.c & nt/win9x.c.
+Usage "--service" options as win9x "run-as-service" flag.
+
+2003/07/16 15:51:17 0.9.6a-60 stas
+Fix: restore "Minimise to tray"
+
+2003/07/16 15:50:46 0.9.6a-59 stas
+Fix: restore "Minimise to tray"
+
+2003/07/16 15:43:25 0.9.6a-58 stas
+Fix: restore -T option
+
+2003/07/16 15:42:56 0.9.6a-57 stas
+Fix: restore -T option
+
+2003/07/16 15:09:22 0.9.6a-56 stas
+Fix NT services to use getopt(). Improve logging for service
+
+2003/07/16 15:08:51 0.9.6a-55 stas
+Fix NT services to use getopt(). Improve logging for service
+
+2003/07/13 09:37:53 0.9.6a-54 gul
+Fix daemonize with libc5
+
+2003/07/12 18:22:08 0.9.6a-53 gul
+Fix typo in comment
+
+2003/07/12 18:06:45 0.9.6a-52 gul
+Fixed node output on debugcfg
+
+2003/07/11 15:06:44 0.9.6a-51 gul
+Fix building with libc5
+
+2003/07/08 06:48:05 0.9.6a-50 gul
+cosmetics
+
+2003/07/07 18:38:58 0.9.6a-49 hbrew
+Fix gcc(mingw) warnings:
+
+getopt.c:   suggest explicit braces to avoid ambiguous `else'
+nt/win9x.c: Avoid gcc warnings about non-handled enumeration values
+
+2003/07/07 18:38:27 0.9.6a-48 hbrew
+Fix gcc(mingw) warnings:
+
+getopt.c:   suggest explicit braces to avoid ambiguous `else'
+nt/win9x.c: Avoid gcc warnings about non-handled enumeration values
+
+2003/07/07 10:39:27 0.9.6a-47 gul
+getopt() usage fix
+
+2003/07/07 10:14:22 0.9.6a-46 gul
+Use getopt() for commandline parse
+
+2003/07/07 10:13:56 0.9.6a-45 gul
+Use getopt() for commandline parse
+
+2003/07/07 08:42:06 0.9.6a-44 val
+check real length of SvPV() when importing queue element from perl
+
+2003/07/07 08:38:20 0.9.6a-43 val
+safe pkthdr-reading function (to byte order and struct alignment)
+
+2003/07/07 08:34:29 0.9.6a-42 val
+pmatch() replaced by define to xpmatch()
+
+2003/07/07 08:33:27 0.9.6a-41 val
+`perl-hooks' config keyword to specify perl script
+
+2003/07/06 10:34:29 0.9.6a-40 gul
+Migrate workaround of 100% CPU load with winsock from stable branch
+
+2003/07/06 10:18:59 0.9.6a-39 gul
+Increase loglevel for "Watinig for M_GOT" message
+
+2003/07/06 08:32:33 0.9.6a-38 gul
+Decrease logging about link status changes
+
