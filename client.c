@@ -108,9 +108,6 @@ static int do_client(BINKD_CONFIG *config)
   FTN_NODE *r;
   int pid;
 
-#ifdef AMIGA
-  fprintf(stderr, "DO_CLIENT: entered, q_present=%d n_clients=%d\n", config->q_present, n_clients); fflush(stderr);
-#endif
   if (!config->q_present)
   {
     q_free (SCAN_LISTED, config);
@@ -129,9 +126,6 @@ static int do_client(BINKD_CONFIG *config)
   if (n_clients < config->max_clients)
   {
     r = q_next_node (config);
-#ifdef AMIGA
-    fprintf(stderr, "DO_CLIENT: q_next_node returned %p\n", (void*)r); fflush(stderr);
-#endif
     if (r != 0)
     {
       struct call_args args;
@@ -150,13 +144,7 @@ static int do_client(BINKD_CONFIG *config)
       lock_config_structure(config);
       args.node   = r;
       args.config = config;
-#ifdef AMIGA
-      fprintf(stderr, "DO_CLIENT: calling branch(call,...)\n"); fflush(stderr);
-#endif
       pid = branch (call, &args, sizeof (args));
-#ifdef AMIGA
-      fprintf(stderr, "DO_CLIENT: branch() returned %d, n_clients now %d\n", pid, n_clients); fflush(stderr);
-#endif
       if (pid < 0)
       {
         unlock_config_structure(config, 0);
@@ -666,13 +654,7 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
   if (sockfd == INVALID_SOCKET)
     return 0;
 
-#ifdef AMIGA
-  fprintf(stderr, "CALL0: calling protocol()\n"); fflush(stderr);
-#endif
   protocol (sockfd, sock_out, node, NULL, host, port, dst_ip, config);
-#ifdef AMIGA
-  fprintf(stderr, "CALL0: protocol() returned, pid=%d\n", pid); fflush(stderr);
-#endif
   if (pid != -1)
   {
     del_socket(sock_out);
@@ -695,17 +677,8 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
   else
   {
     del_socket(sockfd);
-#ifdef AMIGA
-    fprintf(stderr, "CALL0: calling soclose(sockfd)\n"); fflush(stderr);
-#endif
     soclose (sockfd);
-#ifdef AMIGA
-    fprintf(stderr, "CALL0: soclose() returned\n"); fflush(stderr);
-#endif
   }
-#ifdef AMIGA
-  fprintf(stderr, "CALL0: returning from call0()\n"); fflush(stderr);
-#endif
   return 1;
 }
 
