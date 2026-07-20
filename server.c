@@ -176,6 +176,19 @@ static int do_server(BINKD_CONFIG *config)
         soclose(sockfd[sockfd_used]);
         return -1;
       }
+#ifdef AMIGA
+      /* Every other socket in this codebase gets set non-blocking via
+       * setsockopts() (protocol.c, on the accepted session socket) - the
+       * *listening* socket itself never did, on any platform, presumably
+       * because a real BSD accept() on an already select()-ready
+       * listening socket is guaranteed not to block regardless of its
+       * own blocking mode. Real-hardware testing found accept() blocking
+       * anyway right after a real "select() returned 1" on Amiberry's
+       * bsdsocket_emu - either that guarantee doesn't hold here, or
+       * something related doesn't. Belt-and-suspenders: make the
+       * listening socket itself non-blocking too. */
+      setsockopts(sockfd[sockfd_used]);
+#endif
 
       sockfd_used++;
     }
@@ -263,6 +276,16 @@ static int do_server(BINKD_CONFIG *config)
                                 &client_addr_len)) == INVALID_SOCKET)
       {
         save_errno = TCPERRNO;
+#ifdef AMIGA
+        /* The listening socket is now explicitly non-blocking (see
+         * do_server()'s setsockopts() call after listen()) - accept()
+         * can legitimately return EWOULDBLOCK/EAGAIN here (select() said
+         * ready, but nothing actually is by the time accept() runs -
+         * seen this exact gap on Amiberry's bsdsocket_emu). Not a real
+         * error, just try again next time round the loop. */
+        if (save_errno == EWOULDBLOCK || save_errno == EAGAIN)
+          continue;
+#endif
         if (save_errno != EINVAL && save_errno != EINTR)
         {
           if (!binkd_exit)
