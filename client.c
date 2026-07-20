@@ -108,6 +108,9 @@ static int do_client(BINKD_CONFIG *config)
   FTN_NODE *r;
   int pid;
 
+#ifdef AMIGA
+  fprintf(stderr, "DO_CLIENT: entered, q_present=%d n_clients=%d\n", config->q_present, n_clients); fflush(stderr);
+#endif
   if (!config->q_present)
   {
     q_free (SCAN_LISTED, config);
@@ -125,7 +128,11 @@ static int do_client(BINKD_CONFIG *config)
   }
   if (n_clients < config->max_clients)
   {
-    if ((r = q_next_node (config)) != 0)
+    r = q_next_node (config);
+#ifdef AMIGA
+    fprintf(stderr, "DO_CLIENT: q_next_node returned %p\n", (void*)r); fflush(stderr);
+#endif
+    if (r != 0)
     {
       struct call_args args;
 
@@ -143,7 +150,14 @@ static int do_client(BINKD_CONFIG *config)
       lock_config_structure(config);
       args.node   = r;
       args.config = config;
-      if ((pid = branch (call, &args, sizeof (args))) < 0)
+#ifdef AMIGA
+      fprintf(stderr, "DO_CLIENT: calling branch(call,...)\n"); fflush(stderr);
+#endif
+      pid = branch (call, &args, sizeof (args));
+#ifdef AMIGA
+      fprintf(stderr, "DO_CLIENT: branch() returned %d, n_clients now %d\n", pid, n_clients); fflush(stderr);
+#endif
+      if (pid < 0)
       {
         unlock_config_structure(config, 0);
         rel_grow_handles (-6);
@@ -713,7 +727,7 @@ static void call (void *arg)
   if (poll_flag)
     PostSem(&wakecmgr);
   ENDTHREAD();
-#elif defined(DOS) || defined(DEBUGCHILD)
+#elif defined(DOS) || defined(DEBUGCHILD) || defined(AMIGA)
   --n_clients;
 #endif
 }
