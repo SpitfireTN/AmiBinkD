@@ -666,7 +666,13 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
   if (sockfd == INVALID_SOCKET)
     return 0;
 
+#ifdef AMIGA
+  fprintf(stderr, "CALL0: calling protocol()\n"); fflush(stderr);
+#endif
   protocol (sockfd, sock_out, node, NULL, host, port, dst_ip, config);
+#ifdef AMIGA
+  fprintf(stderr, "CALL0: protocol() returned, pid=%d\n", pid); fflush(stderr);
+#endif
   if (pid != -1)
   {
     del_socket(sock_out);
@@ -689,8 +695,17 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
   else
   {
     del_socket(sockfd);
+#ifdef AMIGA
+    fprintf(stderr, "CALL0: calling soclose(sockfd)\n"); fflush(stderr);
+#endif
     soclose (sockfd);
+#ifdef AMIGA
+    fprintf(stderr, "CALL0: soclose() returned\n"); fflush(stderr);
+#endif
   }
+#ifdef AMIGA
+  fprintf(stderr, "CALL0: returning from call0()\n"); fflush(stderr);
+#endif
   return 1;
 }
 
