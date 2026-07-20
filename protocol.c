@@ -1892,6 +1892,10 @@ static int start_file_recv (STATE *state, char *args, int sz, BINKD_CONFIG *conf
 
   if ((args = parse_msg_args (argc, argv, args, "M_FILE", state)) != NULL)
   {
+#ifdef AMIGA
+    fprintf(stderr, "M_FILE: argv[0]='%s' argv[1]='%s' argv[2]='%s' argv[3]='%s'\n",
+            argv[0], argv[1], argv[2], argv[3]); fflush(stderr);
+#endif
     /* They request us for offset (M_FILE "name size time -1") */
     int off_req = 0;
 
@@ -1933,6 +1937,10 @@ static int start_file_recv (STATE *state, char *args, int sz, BINKD_CONFIG *conf
       if (errmesg) {
           Log ( 1, "File time parsing error: %s! (M_FILE \"%s %s %s %s\")", errmesg, argv[0], argv[1], argv[0], argv[2], argv[3] );
       }
+#ifdef AMIGA
+      fprintf(stderr, "M_FILE: computed in.size=%" PRIuMAX " in.time=%ld\n",
+              (uintmax_t)state->in.size, (long)state->in.time); fflush(stderr);
+#endif
     }
     offset = (boff_t) strtoumax (argv[3], NULL, 10);
     if (!strcmp (argv[3], "-1"))

@@ -290,6 +290,22 @@ typedef unsigned long int u32;
  #define PRIuMAX "lu"
 #endif
 
+#ifdef AMIGA
+/* This toolchain's intmax_t/uintmax_t are "long long" (8 bytes), even
+ * though this is a 32-bit target - confirmed via __UINTMAX_TYPE__. The
+ * generic "ld"/"lu" fallback below assumes a 4-byte long, which silently
+ * truncates/misaligns every varargs slot after a PRIuMAX/PRIdMAX-formatted
+ * argument on this big-endian CPU (each 8-byte value only half-consumed,
+ * shifting all subsequent arguments in the same printf/sprintf call by 4
+ * bytes) - this is what was producing garbled numbers like "(0 byte(s),
+ * off 7475)" instead of "(7475 byte(s), off 0)" in the logs, and corrupted
+ * the same fields in our own outgoing M_GET/M_FILE protocol messages. */
+ #undef PRIdMAX
+ #define PRIdMAX "lld"
+ #undef PRIuMAX
+ #define PRIuMAX "llu"
+#endif
+
 #ifndef PRIdMAX
 #define PRIdMAX "ld"
 #define PRIuMAX "lu"
