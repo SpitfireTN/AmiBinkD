@@ -2820,8 +2820,13 @@ static int banner (STATE *state, BINKD_CONFIG *config)
 
   msg_send2 (state, M_NUL, "TIME ", szLocalTime);
 
+#ifdef AMIGA
+  msg_sendf (state, M_NUL,
+    "VER C-Net/5 AmiBinkd v10.0-" PRTCLNAME "/" PRTCLVER);
+#else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());
+#endif
 
 #ifdef WITH_PERL
   if (state->to) {
