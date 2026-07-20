@@ -4,11 +4,26 @@ A native AmigaOS 3.x port of [binkd](https://github.com/pgul/binkd), the
 FTN (FidoNet Technology Network) mailer, built without ixemul.library or
 ixnet.library.
 
-## Status: first working build (untested on real hardware/Amiberry)
+## Status: working on real Amiberry, both directions confirmed
 
-This cross-compiles and links cleanly into a loadable AmigaOS binary
-(`amibinkd`), with zero references to ixemul/ixnet anywhere in the binary.
-It has **not yet been run** on AmigaOS/Amiberry - that's the next step.
+Cross-compiles and links cleanly into a loadable AmigaOS binary
+(`amibinkd`), zero references to ixemul/ixnet anywhere in the binary.
+Tested live on the user's production Amiberry instance (deployed to
+`DH0:AmiBinkd/`, config `AmiBinkd.cfg`, real FTN addresses/domains):
+
+- **Outbound (client/poll)**: repeatedly connects to a real remote binkd
+  (`Mystic/1.12A49`), completes full BinkP handshake incl. CRAM-MD5 auth,
+  exchanges SYS/LOC/ZYZ/TIME/VER/BUILD info, clean session close.
+- **Inbound (server)**: accepts a real connection from the network hub,
+  runs the full session (or a clean auth failure for a wrong per-node
+  password - a config issue, not a bug), and correctly returns to
+  waiting for the next connection afterward - the original hang this
+  port fought hardest to fix.
+
+Getting here took several rounds of real-hardware-only bugs - Amiberry's
+`bsdsocket_emu` diverges from real Roadshow/real BSD sockets in more than
+one place, and none of these were visible from cross-compiling alone.
+See "Real-hardware findings" below before touching networking code here.
 
 ## Background
 
@@ -129,10 +144,69 @@ make
     double` (`pow10`/`round`) for `%f` support, which drags in the same
     broken `libgcc` dependency for code we don't even need.
 
+## Real-hardware findings (Amiberry's bsdsocket_emu is not real Roadshow)
+
+Every one of these compiled and linked fine, and looked correct from the
+header/API surface alone - each was only caught by actually running on
+real Amiberry. If something networking-related here seems to work in
+cross-compilation but misbehaves live, check this list before assuming
+the C code is at fault:
+
+1. **`getaddrinfo()`/`getnameinfo()` aren't implemented**, despite
+   `<inline/bsdsocket.h>` declaring them as real bsdsocket.library vector
+   calls and this toolchain's `netdb.h` having the matching constants -
+   calling them caused a wild-jump crash (Guru `8000000B`, Line-1111/
+   unimplemented-instruction) on the very first call, before the config
+   file was even opened. Fixed by forcing `rfc2553.h`'s AMIGA path to
+   always use upstream's own self-contained emulation (`gethostbyname()`-
+   based) instead of trusting the real vector - see `iphdr.h`'s
+   `#undef getaddrinfo` etc. and `rfc2553.h`'s `&& !defined(AMIGA)`.
+2. **`ioctl(FIONBIO)`/`fcntl(O_NONBLOCK)` don't work on socket
+   descriptors** - they're AmigaDOS file-handle calls, and bsdsocket
+   sockets aren't AmigaDOS file handles without ixemul's translation
+   layer. Silently failed ("No such file or directory") every time,
+   meaning sockets were never actually non-blocking. Fixed in
+   `iptools.c`'s `setsockopts()`: AMIGA now uses `IoctlSocket()`,
+   bsdsocket.library's real equivalent.
+3. **A select()-ready listening socket's `accept()` is not guaranteed
+   non-blocking**, unlike real BSD sockets. This was the original,
+   hardest-to-find bug: server accepted a connection fine, but `accept()`
+   then blocked forever right after `select()` had just reported that
+   exact socket as ready - no crash, no error, just silence. Every other
+   socket in the codebase gets set non-blocking via `setsockopts()`
+   (`protocol.c`, on the *accepted* session socket) but the *listening*
+   socket itself never did on any platform, since it was never needed
+   before. Fixed in `server.c`'s `do_server()`: explicitly `setsockopts()`
+   the listening socket too, and treat `EWOULDBLOCK`/`EAGAIN` from
+   `accept()` as a normal retry instead of a fatal error.
+4. **`WaitSelect()`'s `signals` parameter (for waking on Exec signals
+   like `SIGBREAKF_CTRL_C`, not just socket activity) doesn't work** -
+   passing it made no difference; Ctrl-C/`Break` still couldn't interrupt
+   a blocked `select()` call, hanging a stuck process past even a
+   `Break <pid> C` (needed a full reboot to clear).
+5. **Calling `WaitSelect()` too rapidly breaks it** - a first fix attempt
+   for #4 polled in a tight 0.25s loop instead, checking `SetSignal()` for
+   CTRL_C between calls. That surfaced yet another bug: after a handful of
+   rapid successive calls, `WaitSelect()` started returning `-1` with
+   `errno` left at 0 ("No error"), no real error condition. Fixed in
+   `amiga_glue.c`'s `select()`: when the caller already provides a
+   bounded timeout (true almost everywhere in this codebase), make
+   exactly **one** `WaitSelect()` call - matching original/vanilla call
+   frequency - then check CTRL_C once after, via `SetSignal(0, mask)`
+   (not `CheckSignal()` - this toolchain's `<proto/dos.h>` resolves to an
+   older `ndk13-include` variant that doesn't declare it). Only polls (in
+   1s steps) for the rarer case of a caller wanting to block indefinitely.
+6. **Reverse DNS (`backresolv`) on a private/non-routable IP can hang
+   the whole session** - not an Amiberry bug exactly, but a real trap:
+   with `backresolv` enabled, an inbound connection from a LAN address
+   (e.g. `192.168.x.x`) triggers a synchronous reverse-lookup that can
+   never resolve, blocking the entire session (and everything else,
+   given the synchronous concurrency model) until the *remote* side's own
+   protocol timeout gives up first. `backresolv` is purely cosmetic
+   (nicer hostnames in the log) - fine to leave disabled.
+
 ## Not done yet
 
-- **Never run on real AmigaOS or Amiberry** - only cross-compiled and
-  linked on Linux so far.
 - No zlib/bzip2 compression (`WITH_ZLIB`/`WITH_BZLIB2` not defined -
   matches the historical Amiga build, which also shipped without them).
 - No DNS SRV-record lookups (see `srv_gai.c` note above).
@@ -140,4 +214,13 @@ make
   returns failure) - not a core binkp/FTN feature, only one caller.
 - True concurrency (more than one binkp session at once) - see the
   synchronous-execution decision above.
-- Config file (`binkd.cfg`) not yet tested against this build at all.
+- Long soak testing (real traffic over days, not just a handful of
+  manual test polls both directions).
+- The `.csy` busy-flag file occasionally fails to unlink
+  (`error unlinking '...csy': Text file busy`) after a completed
+  session - didn't stop the session from finishing successfully, not
+  yet root-caused.
+- Per-node password mismatches surfaced during testing are a config
+  issue (`AmiBinkd.cfg`'s `node` lines vs. what the hub expects), not
+  a code bug - worth double-checking all configured nodes, not
+  something this port needs to fix.
