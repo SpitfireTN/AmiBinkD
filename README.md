@@ -9,21 +9,33 @@ ixnet.library.
 Cross-compiles and links cleanly into a loadable AmigaOS binary
 (`amibinkd`), zero references to ixemul/ixnet anywhere in the binary.
 Tested live on the user's production Amiberry instance (deployed to
-`DH0:AmiBinkd/`, config `AmiBinkd.cfg`, real FTN addresses/domains):
+`DH0:AmiBinkd/`, per-network configs `cnet.cfg`/`araknet.cfg`/
+`disciple.cfg`/`fidonet.cfg`/`pinet.cfg`/`retronet.cfg`/`amiganet.cfg`,
+real FTN addresses/domains):
 
-- **Outbound (client/poll)**: repeatedly connects to a real remote binkd
-  (`Mystic/1.12A49`), completes full BinkP handshake incl. CRAM-MD5 auth,
-  exchanges SYS/LOC/ZYZ/TIME/VER/BUILD info, clean session close.
+- **Outbound (client/poll)**: repeatedly connects to real remote binkds
+  (`Mystic/1.12A49` and, on fidonet, the real reference `binkd/1.1a-115`
+  itself), completes full BinkP handshake incl. CRAM-MD5 auth, exchanges
+  SYS/LOC/ZYZ/TIME/VER/BUILD info, clean session close.
 - **Inbound (server)**: accepts a real connection from the network hub,
   runs the full session (or a clean auth failure for a wrong per-node
   password - a config issue, not a bug), and correctly returns to
   waiting for the next connection afterward - the original hang this
   port fought hardest to fix.
+- **Multi-node polling in one invocation** (`-P addr1 -P addr2 ...`), and
+  the equivalent pattern of polling each network via its own `Execute
+  <net>.scr` in sequence from a driver script (`FTN_Poll`): confirmed
+  working through all seven configured networks in one run, including
+  **real inbound file reception and successful CNet/5 Toss import** of
+  the received packets - not just clean-looking session logs.
 
 Getting here took several rounds of real-hardware-only bugs - Amiberry's
 `bsdsocket_emu` diverges from real Roadshow/real BSD sockets in more than
-one place, and none of these were visible from cross-compiling alone.
-See "Real-hardware findings" below before touching networking code here.
+one place, this toolchain's `intmax_t`/`uintmax_t` size assumptions don't
+match `sys.h`'s fallback format-string macros, and one bug (`o_rename()`)
+was entirely our own - and none of these were visible from
+cross-compiling alone. See "Real-hardware findings" below before touching
+networking, logging, or filesystem code here.
 
 ## Background
 
@@ -110,6 +122,26 @@ make
   SIGCHLD/waitpid machinery) stay `HAVE_FORK`-only; confirmed via
   `common.h`'s `check_child()` macro that they're never reachable
   without it.
+- **`client.c`**: `n_clients` (gates `do_client()`'s "can I start another
+  poll" check, and its "queue is empty, quitting" exit condition) was
+  only ever decremented for `HAVE_THREADS` or `DOS`/`DEBUGCHILD` at the
+  end of `call()` - never for `AMIGA`. Harmless for a single `-P` poll,
+  but fatal for polling more than one node in one invocation: after the
+  first session, the stale non-zero counter meant `do_client()` never
+  correctly re-evaluated the queue, and the process just sat there after
+  logging its own "session closed, quitting..." Fixed by adding `AMIGA`
+  to the same `#elif` branch as `DOS`/`DEBUGCHILD`.
+- **`amiga/rename.c`** (new file, not present in the AmiBinkD-main
+  starting point): implements `o_rename()`, which `sys.h` maps `RENAME()`
+  to for `AMIGA`/`UNIX` (upstream's own `if (!RENAME(...))`-based
+  finalize/retry logic in `inbound.c` expects POSIX `rename()` semantics
+  - 0 on success). Went through two rounds: it originally called
+  AmigaDOS's `Rename()` correctly, but got the return-value sense
+  backwards (`Rename()` returns *nonzero* on success, same convention as
+  `Lock()`/`CreateDir()`/`DeleteFile()`, but the wrapper reported that as
+  a POSIX failure and vice versa) and never set `errno` on the real
+  failure path. See finding #8 below - this one was entirely our own bug,
+  not an Amiberry divergence.
 - **Compiler/libc quirks specific to this toolchain** (none ixemul-related,
   just this specific bebbo build's rough edges):
   - `sys.h` needs `-DHAVE_STDARG_H` or it falls back to pre-ANSI
@@ -127,6 +159,23 @@ make
     which this toolchain doesn't have - excluded from the build;
     `srv_gai.h`'s own fallback macro (`srv_getaddrinfo` → `getaddrinfo`)
     covers every caller.
+  - `sys.h` falls back to defining `PRIuMAX`/`PRIdMAX` as `"lu"`/`"ld"`
+    (4-byte `long`) whenever `<inttypes.h>` hasn't already defined them -
+    which is always, in this build. But this toolchain's real
+    `intmax_t`/`uintmax_t` (confirmed via `__UINTMAX_TYPE__`) is 8-byte
+    `long long`, even on this 32-bit target. Every `Log()`/`msg_sendf()`
+    call passing more than one `PRIuMAX`-formatted `boff_t`/`uintmax_t`
+    argument in a single format string was corrupting its own variadic
+    argument stream from that point on: each 8-byte value only got
+    half-consumed by the 4-byte-wide `%lu`, shifting every later argument
+    in the same call by 4 bytes. On this big-endian CPU that reads as the
+    high 32 bits first - which is why a 7475-byte incoming file logged as
+    `receiving foo.pkt (0 byte(s), off 7475)` instead of `(7475 byte(s),
+    off 0)`, and, far more consequentially, corrupted the same fields in
+    our *outgoing* `M_GET`/`M_FILE` protocol messages, which is what was
+    actually causing "missing tmp file" failures on every session with
+    real mail queued. Fixed by defining `PRIuMAX="llu"`/`PRIdMAX="lld"`
+    for `AMIGA` specifically, ahead of the generic fallback.
   - This toolchain's `libgcc.a` is missing double-precision soft-float
     routines (`__adddf3`/`__muldf3`/etc) under every CPU/FPU flag
     combination tried - a genuine toolchain gap (the symbols exist as
@@ -204,6 +253,53 @@ the C code is at fault:
    given the synchronous concurrency model) until the *remote* side's own
    protocol timeout gives up first. `backresolv` is purely cosmetic
    (nicer hostnames in the log) - fine to leave disabled.
+7. **`n_clients` silently never decremented for AMIGA** (`client.c`'s
+   `call()`) - same class of bug as `n_servers` in `serv()` (`server.c`),
+   but not harmless like that one: `n_servers`'s only consumer
+   (`check_child()`) is a no-op without `HAVE_FORK`, while `n_clients`
+   directly gates `do_client()`'s decision to poll the next queued node.
+   A single `-P` poll never surfaced it (nothing left to decrement for);
+   only testing multiple `-P` addresses in one invocation - or the
+   equivalent, polling several networks back-to-back via separate
+   `Execute <net>.scr` invocations from a driver script - exposed it as a
+   hang right after the first session's own "session closed, quitting..."
+   line. See the `client.c` bullet above for the fix.
+8. **`o_rename()` (`amiga/rename.c`) had success/failure backwards, and
+   never set `errno`** - unlike the other findings here, this was a bug
+   in code we wrote for this port, not an Amiberry/bsdsocket_emu
+   divergence, but it was just as invisible until live testing: AmigaDOS's
+   `Rename()` returns *nonzero* on success (the standard AmigaDOS BOOL
+   convention, same as `Lock()`/`CreateDir()`/`DeleteFile()`), but the
+   wrapper reported that as a POSIX failure (`-1`) and a real AmigaDOS
+   failure as POSIX success (`0`) - inverted - and set no `errno` on the
+   failure path either. `inbound.c`'s finalize-the-received-file logic
+   checks `errno` (`EEXIST`/`EACCES`/`EAGAIN`) to decide whether to retry
+   under an alternate filename or give up; with both bugs stacked, a
+   rename that had *already succeeded on disk* got reported as failed,
+   with whatever stale `errno` happened to be sitting around (often 0,
+   logging the actively misleading `cannot rename foo.pkt to it's
+   realname: No error!`). This silently orphaned a real backlog of
+   received-but-never-finalized packets under their temp names in
+   `Inbound_Temp/` before it was caught - clearing on the next successful
+   Toss run once the fix landed. Fixed by inverting the return mapping
+   and translating `IoErr()` to a real `errno` via a small switch
+   (`EEXIST`/`ENOENT`/`EBUSY`/`ENOSPC`/`EROFS`/`EXDEV`/`EINVAL`/`ENOMEM`,
+   `EIO` fallback).
+
+## Deployment gotcha: AmigaDOS script comments are `;`, not `#`
+
+Not a code bug, but cost real debugging time so it's worth recording:
+the driver scripts that poll each network in sequence (`cnet.scr`,
+`pinet.scr`, etc., invoked in turn by `FTN_Poll`) are plain AmigaDOS
+`Execute` scripts, which use `;` for comments - `#` is not a comment
+character and `Execute` tries to run it as a literal (nonexistent)
+command. Two of the seven per-network `.scr` files had `#`-prefixed
+header comments (leftover from a Unix-shell-style template) that made
+`Execute` fail immediately on the first line with `Unknown command` /
+`failed returncode 10`, aborting not just that script but the whole
+calling `FTN_Poll` chain - which looked identical to a code-level hang
+until the exact stopping point was isolated by running each `.scr`
+standalone.
 
 ## Not done yet
 
@@ -215,8 +311,10 @@ the C code is at fault:
 - True concurrency (more than one binkp session at once) - see the
   synchronous-execution decision above.
 - Long soak testing (real traffic over days, not just a handful of
-  manual test polls both directions).
-- The `.csy` busy-flag file occasionally fails to unlink
+  manual test polls both directions) - though multi-network polling with
+  real inbound reception across all seven configured networks in one run
+  is now confirmed, see "Status" above.
+- The `.csy`/`.bsy` busy-flag file occasionally fails to unlink
   (`error unlinking '...csy': Text file busy`) after a completed
   session - didn't stop the session from finishing successfully, not
   yet root-caused.
@@ -224,3 +322,10 @@ the C code is at fault:
   issue (`AmiBinkd.cfg`'s `node` lines vs. what the hub expects), not
   a code bug - worth double-checking all configured nodes, not
   something this port needs to fix.
+- One tossed fidonet packet (`5d79da03.pkt`) logged `7 msg(s) (0
+  dupe(s)/7 bad)` by CNet's own Toss - not yet investigated; likely
+  pre-existing malformed mail rather than anything in this port, but
+  worth a look if it recurs on fresh packets.
+- `disciple.cfg` currently fails to load (`line 6: error in
+  configuration files` / `disciple: undefined domain`) - a config-file
+  issue on the user's side, not a code bug, being fixed separately.
