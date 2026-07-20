@@ -4,7 +4,7 @@ A native AmigaOS 3.x port of [binkd](https://github.com/pgul/binkd), the
 FTN (FidoNet Technology Network) mailer, built without ixemul.library or
 ixnet.library.
 
-## Status: working on real Amiberry, both directions confirmed
+## Status: working on real Amiberry, both directions confirmed, soak-tested clean
 
 Cross-compiles and links cleanly into a loadable AmigaOS binary
 (`amibinkd`), zero references to ixemul/ixnet anywhere in the binary.
@@ -28,6 +28,10 @@ real FTN addresses/domains):
   working through all seven configured networks in one run, including
   **real inbound file reception and successful CNet/5 Toss import** of
   the received packets - not just clean-looking session logs.
+- **Unattended soak test**: the fixed build (deployed 2026-07-19 23:32)
+  ran unattended overnight, 30-minute polls across all seven networks,
+  through 2026-07-20 morning with no gaps, no hangs, and no repeats of
+  any of the bugs fixed this round - see "Soak test results" below.
 
 Getting here took several rounds of real-hardware-only bugs - Amiberry's
 `bsdsocket_emu` diverges from real Roadshow/real BSD sockets in more than
@@ -310,14 +314,25 @@ standalone.
   returns failure) - not a core binkp/FTN feature, only one caller.
 - True concurrency (more than one binkp session at once) - see the
   synchronous-execution decision above.
-- Long soak testing (real traffic over days, not just a handful of
-  manual test polls both directions) - though multi-network polling with
-  real inbound reception across all seven configured networks in one run
-  is now confirmed, see "Status" above.
-- The `.csy`/`.bsy` busy-flag file occasionally fails to unlink
-  (`error unlinking '...csy': Text file busy`) after a completed
-  session - didn't stop the session from finishing successfully, not
-  yet root-caused.
+- Multi-day/production-scale soak testing - a single overnight
+  (~7 hour, 30-minute-interval) unattended run across all seven
+  networks is confirmed clean (see "Soak test results" below), but that
+  is one night, not weeks of real production volume.
+- The `.csy`/`.bsy` busy-flag file routinely fails to unlink
+  (`error unlinking '...csy': Text file busy`) - the overnight soak
+  test confirms this fires on essentially *every* session, one
+  network-specific file per network (e.g. `39.902.0.0.csy` for
+  amiganet, `64.500.0.0.csy` for cnet), not an intermittent glitch.
+  Purely cosmetic: every affected session still logged `done (...,
+  OK, ...)` right after. Still not root-caused - worth a look if it
+  ever *does* coincide with a real failure, but not urgent.
+- Same soak test also logged a handful (3 total, ArakNet x1, C=Net x2)
+  of `error unlinking '...Inbound_Temp/*.dt': No such file or
+  directory` immediately after a successful `done OK` session close -
+  a session-cleanup step trying to remove a temp marker that was
+  already gone. Harmless (the session it followed had already
+  completed successfully both before and after), rare, not
+  investigated further.
 - Per-node password mismatches surfaced during testing are a config
   issue (`AmiBinkd.cfg`'s `node` lines vs. what the hub expects), not
   a code bug - worth double-checking all configured nodes, not
@@ -326,6 +341,29 @@ standalone.
   dupe(s)/7 bad)` by CNet's own Toss - not yet investigated; likely
   pre-existing malformed mail rather than anything in this port, but
   worth a look if it recurs on fresh packets.
-- `disciple.cfg` currently fails to load (`line 6: error in
-  configuration files` / `disciple: undefined domain`) - a config-file
-  issue on the user's side, not a code bug, being fixed separately.
+
+## Soak test results (2026-07-19 evening -> 2026-07-20 morning)
+
+Fixed build deployed to `DH0:AmiBinkd/AmiBinkd` 2026-07-19 23:32, then
+left running unattended overnight under the normal `FTN_Poll` /
+30-minute-interval driver-script schedule across all seven networks.
+Reviewed `DH3:CNet/SysData/log/*.log` the next morning:
+
+- All seven per-network logs current through ~05:30-05:40 the next
+  morning, 30-minute cadence, no gaps and no hangs.
+- Every occurrence of the `o_rename()` `cannot rename ... No error!` bug
+  (7 total, across ArakNet/FidoNet/PiNet/RetroNet) timestamps to
+  *before* 23:32 - i.e. the pre-fix build. Zero recurrences since the
+  fixed binary went live.
+- Every occurrence of `disciple.scr`'s old `-P12:136/0` typo similarly
+  predates 23:32; every disciple poll since used the corrected
+  `-P12:316/0` and completed `done (..., OK, ...)`.
+- Disk usage flat and unremarkable (22% used, 171G free) - no leaked
+  temp files piling up.
+- The two still-open cosmetic issues above (`.csy`/`.bsy` unlink and
+  the rare `.dt` unlink) are the only things that showed up; neither
+  ever blocked a session from completing.
+
+Net result: every bug fixed this round held overnight under real
+unattended production traffic. The only open item is the pre-existing,
+purely cosmetic `.csy`/`.bsy` unlink issue.
