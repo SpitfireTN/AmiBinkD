@@ -699,7 +699,7 @@ int sdelete (char *path)
       Log (6, "unlinked `%s'", path);
       return 0;
     }
-    else if (errno == EPERM || errno == EACCES || errno == EAGAIN)
+    else if (errno == EPERM || errno == EACCES || errno == EAGAIN || errno == ETXTBSY)
       sleep (1);
     else
       break;

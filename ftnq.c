@@ -433,7 +433,7 @@ static void process_bsy (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
 
     ftnaddress_to_str (buf, fa);
     Log (2, "found old %s file for %s", s, buf);
-    delete (path);
+    sdelete (path);
   }
   else
   {
