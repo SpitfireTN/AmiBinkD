@@ -78,6 +78,12 @@ static void serv (void *arg)
   threadsafe(--n_servers);
   PostSem(&eothread);
   ENDTHREAD();
+#elif defined(AMIGA)
+  /* v10.5: see the matching comment in client.c's call() - was a bare
+   * --n_servers, safe only under the old always-synchronous branch().
+   * Real concurrent sessions need this threadsafe() now. */
+  threadsafe(--n_servers);
+  PostSem(&eothread);
 #elif defined(DOS) || defined(DEBUGCHILD)
   --n_servers;
 #endif

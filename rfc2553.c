@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "sem.h"
+#include "tools.h"
 
 #ifndef HAVE_GETADDRINFO
 /* getaddrinfo - Resolve a hostname
@@ -29,7 +30,11 @@ int getaddrinfo(const char *nodename, const char *servname,
    const char *End;
    char **CurAddr;
    int ret = 0;
-   
+#ifdef AMIGA
+   struct in_addr amigaCachedAddr;
+   char *amigaFakeList[2];
+#endif
+
    /* Sanitize return parameters */
    if (res == NULL)
       return EAI_UNKNOWN;
@@ -87,6 +92,59 @@ int getaddrinfo(const char *nodename, const char *servname,
    /* Hostname lookup, only if this is not a listening socket */
    if (hints != 0 && (hints->ai_flags & AI_PASSIVE) != AI_PASSIVE)
    {
+#ifdef AMIGA
+      /* v10.14: gethostbyname() genuinely works here now - the v10.9
+       * hang (blocked in a spawned, non-opener child, same root cause
+       * as the connect() hang v10.12 fixed - see that changelog entry)
+       * doesn't reproduce once each child has its own private
+       * bsdsocket.library instance. Confirmed via v10.13's live
+       * experiment: 2 full days, 2 reboots, ~60 poll cycles per network
+       * across all 7 networks, zero recurring failures (one isolated,
+       * non-reproducing blip on one boot, never seen again). The v10.9
+       * host-side DNS cache script and its cache-only lookup function
+       * are gone for good as of this release - don't reintroduce that
+       * class of workaround without new evidence gethostbyname() is
+       * broken again; check whether v10.12's private-SocketBase fix is
+       * still in place first, since that's what actually fixed this.
+       * The numeric-address short-circuit stays - it's a legitimate
+       * optimization (and matches how getaddrinfo() is also called
+       * elsewhere in this codebase with AI_NUMERICHOST) independent of
+       * whatever handles the non-numeric case. */
+      if (inet_addr(nodename) == INADDR_NONE)
+      {
+         Addr = gethostbyname(nodename);
+         if (Addr == 0)
+         {
+            if (h_errno == TRY_AGAIN)
+            {
+               ret = EAI_AGAIN;
+               goto cleanup;
+            }
+            if (h_errno == NO_RECOVERY)
+            {
+               ret = EAI_FAIL;
+               goto cleanup;
+            }
+            ret = EAI_NONAME;
+            goto cleanup;
+         }
+
+         if (Addr->h_addr_list[0] == 0)
+         {
+            ret = EAI_NONAME;
+            goto cleanup;
+         }
+
+         CurAddr = Addr->h_addr_list;
+      }
+      else
+      {
+         amigaCachedAddr.s_addr = inet_addr(nodename);
+         amigaFakeList[0] = (char *) &amigaCachedAddr;
+         amigaFakeList[1] = NULL;
+         CurAddr = amigaFakeList;
+      }
+#else
       Addr = gethostbyname(nodename);
       if (Addr == 0)
       {
@@ -103,15 +161,16 @@ int getaddrinfo(const char *nodename, const char *servname,
 	 ret = EAI_NONAME;
          goto cleanup;
       }
-   
+
       /* No A records */
       if (Addr->h_addr_list[0] == 0)
       {
 	 ret = EAI_NONAME;
 	 goto cleanup;
       }
-      
+
       CurAddr = Addr->h_addr_list;
+#endif
    }
    else
       CurAddr = (char **)&End;    /* Fake! */

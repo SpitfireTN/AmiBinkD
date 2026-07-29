@@ -74,6 +74,7 @@ MUTEXSEM lsem;
 MUTEXSEM blsem;
 MUTEXSEM varsem;
 MUTEXSEM config_sem;
+MUTEXSEM peernamesem;
 EVENTSEM eothread;
 EVENTSEM wakecmgr;
 #ifdef OS2
@@ -532,6 +533,7 @@ int main (int argc, char *argv[])
   InitSem (&blsem);
   InitSem (&varsem);
   InitSem (&config_sem);
+  InitSem (&peernamesem);
   InitEventSem (&eothread);
   InitEventSem (&wakecmgr);
 #ifdef OS2
@@ -593,7 +595,7 @@ int main (int argc, char *argv[])
   else
     Log (4, "BEGIN standalone, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #elif defined(AMIGA)
-  Log (4, "BEGIN, C-Net/5 Amiga Pro AmiBinkd v10.1 " MYNAME "/" MYVER "%s", tmp);
+  Log (4, "BEGIN, C-Net/5 Amiga Pro AmiBinkd v10.14 " MYNAME "/" MYVER "%s", tmp);
 #else
   Log (4, "BEGIN, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #endif

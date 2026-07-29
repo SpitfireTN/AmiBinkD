@@ -2822,7 +2822,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
 
 #ifdef AMIGA
   msg_sendf (state, M_NUL,
-    "VER C-Net/5 AmiBinkd v10.1-" PRTCLNAME "/" PRTCLVER);
+    "VER C-Net/5 AmiBinkd v10.14-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());
@@ -3127,11 +3127,20 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   }
   else if (!state.pipe)
   {
+    /* v10.7: peernamesem serializes this syscall and the TCPERR()/errno
+     * logging right after it against the same pairing running in a
+     * sibling concurrent session Process - see sem.h. Without it, a burst
+     * of simultaneous incoming connections can (and, on real Amiberry,
+     * does) have one session's failing call logged with another
+     * session's unrelated errno, typically surfacing as a nonsensical
+     * "getpeername: No error". */
+    LockSem (&peernamesem);
     if ((status = getpeername (socket_in, (struct sockaddr *)&peer_name, &peer_name_len)) != 0)
     {
       if (!binkd_exit)
         Log (1, "getpeername: %s", TCPERR());
     }
+    ReleaseSem (&peernamesem);
     /* verify that output of getpeername() is safe (enough) and resolve
      * IP and hostname if so requested and possible.
      */
@@ -3184,6 +3193,10 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
        state.peer_name,
        current_port ? ":" : "", current_port ? current_port : "");
 
+  /* v10.7: same peernamesem protection as the getpeername() call above -
+   * getsockname()'s TCPERR() read is just as exposed to a sibling
+   * session's errno clobbering it first. */
+  LockSem (&peernamesem);
   if (state.pipe || getsockname (socket_in, (struct sockaddr *)&peer_name, &peer_name_len) == -1)
   {
     if (!state.pipe && !binkd_exit)
@@ -3192,8 +3205,8 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   }
   else
   {
-    status = getnameinfo((struct sockaddr *)&peer_name, peer_name_len, 
-		ownhost, sizeof(ownhost), 
+    status = getnameinfo((struct sockaddr *)&peer_name, peer_name_len,
+		ownhost, sizeof(ownhost),
 		ownserv, sizeof(ownserv), NI_NUMERICHOST | NI_NUMERICSERV);
     if (status == 0)
     {
@@ -3203,6 +3216,7 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
     else
       Log(2, "Error in getnameinfo(): %s (%d)", gai_strerror(status), status);
   }
+  ReleaseSem (&peernamesem);
 
   if (banner (&state, config) == 0) ;
   else if (n_servers > config->max_servers && !to)

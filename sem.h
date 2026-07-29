@@ -138,6 +138,20 @@ extern MUTEXSEM lsem;
 extern MUTEXSEM blsem;
 extern MUTEXSEM varsem;
 extern MUTEXSEM config_sem;
+/* v10.7 (AMIGA only in practice): guards protocol()'s peer/own-socket
+ * identity resolution (getpeername()/getsockname() and the TCPERR()/errno
+ * logging right after each) - see protocol.c. Needed because this
+ * toolchain's errno (libnix, TCPERR()/TCPERRNO -> strerror(errno)/errno)
+ * is a single plain global, not per-Task/per-Process storage, and classic
+ * AmigaOS's flat shared address space means every CreateNewProcTags
+ * session Process reads/writes the exact same memory location for it -
+ * a sibling session's own syscall can silently reset it between this
+ * session's failing call and the Log() that reads it back. Deliberately
+ * a dedicated semaphore, not a reuse of hostsem/resolvsem, since this
+ * critical section itself calls into code that already takes hostsem/
+ * resolvsem internally (rfc2553.c) - reusing either here would risk a
+ * self-deadlock. */
+extern MUTEXSEM peernamesem;
 extern EVENTSEM eothread;
 extern EVENTSEM wakecmgr;
 #define lockhostsem()		LockSem(&hostsem)

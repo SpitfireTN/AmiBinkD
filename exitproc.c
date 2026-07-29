@@ -136,6 +136,46 @@ void exitfunc (void)
     /* sleep (1); */
   }
   close_srvmgr_socket();
+#elif defined(AMIGA)
+  /* v10.5: real concurrent sessions (branch.c, CreateNewProcTags) need a
+   * drain here too - through v10.4 branch() always ran synchronously,
+   * so exitfunc() could never be reached with a session still in
+   * flight. This is deliberately simpler than the HAVE_THREADS case
+   * above (no pidcmgr/pidsmgr tracking or add_socket()/del_socket()
+   * force-close of in-flight sockets - neither is wired up for AMIGA),
+   * and deliberately does NOT give up after a few seconds and fall
+   * through the way the HAVE_THREADS case does: CreateNewProcTags's
+   * NP_Entry child has no pr_SegList of its own (unlike NP_Seglist) -
+   * only the parent's segment list references the code it's running.
+   * If this process's own exit() actually completed while a spawned
+   * session process was still running, that child could end up
+   * executing out of memory this process's exit teardown just freed -
+   * a real crash risk, not just a cosmetic timeout warning like the
+   * HAVE_THREADS path's. Waiting indefinitely (with periodic logging,
+   * not a silent hang) is the safer failure mode here: a wedged session
+   * blocks shutdown rather than risking a crash, and it's recoverable
+   * the same way this BBS's own stuck-process incidents already are
+   * (kill and relaunch the whole Amiberry instance from the host side)
+   * if it ever actually happens. */
+  { int waited = 0;
+
+    binkd_exit = 1;
+    while (n_servers || n_clients)
+    {
+      if (WaitSem (&eothread, 1))
+      {
+        waited++;
+        if (waited % 10 == 0)
+          Log (2, "exitfunc(): still waiting for %i session(s) to finish (%i sec) - not giving up, see v10.5 notes",
+               n_servers + n_clients, waited);
+      }
+      else
+      {
+        Log (8, "exitfunc(): a session finished");
+        waited = 0;
+      }
+    }
+  }
 #endif
 
   config = lock_current_config();
@@ -160,6 +200,7 @@ void exitfunc (void)
   CleanSem (&lsem);
   CleanSem (&blsem);
   CleanSem (&varsem);
+  CleanSem (&peernamesem);
   CleanEventSem (&eothread);
   CleanEventSem (&wakecmgr);
 #ifdef OS2

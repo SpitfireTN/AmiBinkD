@@ -13,7 +13,44 @@
 
 #include <exec/types.h>
 #include <exec/libraries.h>
+#include <exec/tasks.h>
 #include <dos/dos.h>
+
+/* This toolchain's ndk13-include search path (checked before the real
+ * ndk-include - same gotcha already documented in branch.c and, for
+ * proto/dos.h's CheckSignal, elsewhere in this file) shadows
+ * <utility/tagitem.h> with a literal empty 1-byte stub file that
+ * defines nothing, not even its own include guard - so every attempt
+ * to #include it, direct or transitive (libraries/bsdsocket.h below
+ * tries its own internal one), silently gets nothing. Declared here
+ * directly, guarded by the real header's own guard macro name so nothing
+ * double-defines if a fixed toolchain ever does provide it correctly. */
+#ifndef UTILITY_TAGITEM_H
+#define UTILITY_TAGITEM_H
+typedef ULONG Tag;
+struct TagItem
+{
+    Tag   ti_Tag;
+    ULONG ti_Data;
+};
+#define TAG_DONE ((ULONG) 0)
+#define TAG_USER ((ULONG) (1UL << 31))
+#endif
+
+/* v10.12: redirect every bsdsocket.library call site (this file's own
+ * direct <libraries/bsdsocket.h>/<proto/bsdsocket.h> includes below,
+ * which happen BEFORE this file reaches its own amiga_glue.h) to a
+ * per-Task-aware lookup instead of the bare shared SocketBase global -
+ * see amiga_current_socketbase()'s own comment further down for why.
+ * Duplicated here and in amiga_glue.h (which covers every other file
+ * that reaches bsdsocket declarations via iphdr.h) for the same reason
+ * TAG_DONE/TAG_USER are duplicated between this file and branch.c: each
+ * file's own include order needs the workaround before its first
+ * bsdsocket include, not just the shared header's. */
+extern struct Library *amiga_current_socketbase (void);
+#define BSDSOCKET_BASE_NAME amiga_current_socketbase()
+
+#include <libraries/bsdsocket.h>
 
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -147,12 +184,43 @@ __stdargs char *inet_ntoa(struct in_addr in)
 
 int amiga_socket_init(void)
 {
+    struct TagItem shareTags[2];
+
     SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
     if (SocketBase == NULL)
     {
         Log(0, "Unable to open bsdsocket.library v4+ - is a TCP/IP stack running?");
         return -1;
     }
+
+    /* Roadshow's bsdsocket.library denies Processes other than the one
+     * that opened it access to the library's functions by default (see
+     * bsdsocket.doc's OpenLibrary entry) - since v10.5 runs each BinkP
+     * session as its own real AmigaOS Process (branch.c), every session
+     * but this one would otherwise get silently refused socket access.
+     * SBTC_CAN_SHARE_LIBRARY_BASES opts back into the pre-v4 "any caller
+     * may use this SocketBase" behaviour. The documented cost (error
+     * reporting becomes per-SocketBase rather than per-Process, and
+     * SBTC_SIGIOMASK-style per-Process signal delivery only works for
+     * whichever Process last configured it) was originally judged to
+     * cost nothing here, reasoning only about select() (already
+     * bounded-polling, not signal-wait - see select()'s own comment
+     * above). v10.12 found that reasoning incomplete: a *blocking*
+     * connect() call's own internal completion notification also
+     * depends on this same per-Process delivery, which is why every
+     * outbound poll (client.c's connect(), spawned as a non-opener
+     * child via branch()) hung indefinitely despite the real TCP
+     * handshake completing in well under a second - confirmed live via
+     * packet capture. See amiga_current_socketbase() below and
+     * client.c's call() for the fix: outbound-connecting children now
+     * get their own private, unshared bsdsocket.library instance
+     * instead of relying on this shared one for anything beyond
+     * inbound sessions and the shared select()-based I/O path, which
+     * never depended on signal delivery in the first place. */
+    shareTags[0].ti_Tag  = SBTM_SETVAL(SBTC_CAN_SHARE_LIBRARY_BASES);
+    shareTags[0].ti_Data = TRUE;
+    shareTags[1].ti_Tag  = TAG_DONE;
+    SocketBaseTagList(shareTags);
 
     return 0;
 }
@@ -163,5 +231,59 @@ void amiga_socket_cleanup(void)
     {
         CloseLibrary(SocketBase);
         SocketBase = NULL;
+    }
+}
+
+/* v10.12: every bsdsocket.library call site in this codebase (this
+ * file's own, plus every other file that reaches bsdsocket declarations
+ * via iphdr.h -> amiga_glue.h) resolves through BSDSOCKET_BASE_NAME,
+ * redefined (see the #define near this file's own bsdsocket includes,
+ * and amiga_glue.h) to call this function instead of reading the bare
+ * shared SocketBase global directly. A Task that has installed its own
+ * private base via amiga_open_private_socketbase() (tc_UserData) gets
+ * it; every other Task - the top-level opener, inbound session children
+ * that never call that function, anything spawned before this release -
+ * falls straight through to the existing shared SocketBase, completely
+ * unchanged from pre-v10.12 behaviour. branch.c's amiga_proc_trampoline()
+ * resets tc_UserData to NULL for every freshly spawned child specifically
+ * so this fallback is always safe by default. */
+struct Library *amiga_current_socketbase(void)
+{
+    struct Library *priv = (struct Library *) FindTask(NULL)->tc_UserData;
+    return priv != NULL ? priv : SocketBase;
+}
+
+/* Opens a private, unshared bsdsocket.library instance for the calling
+ * Task and installs it via tc_UserData so amiga_current_socketbase()
+ * (and therefore every bsdsocket call this Task makes from here on)
+ * picks it up automatically. Used by client.c's call() for each spawned
+ * outbound-poll child - see that file for why: a blocking connect()'s
+ * internal completion notification only reaches whichever Process the
+ * library associates as "the caller," which for a shared SocketBase is
+ * whichever Process last configured it, not necessarily this one. An
+ * unshared instance sidesteps that ambiguity entirely - this is
+ * bsdsocket.library's own default, most-tested mode of use (see
+ * bsdsocket.doc's OpenLibrary entry), not a fragile special case.
+ * Returns NULL on failure (caller should log and fall back to the
+ * shared SocketBase rather than aborting - matches this codebase's
+ * general degrade-rather-than-abort posture elsewhere). */
+struct Library *amiga_open_private_socketbase(void)
+{
+    struct Library *priv = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
+    if (priv != NULL)
+        FindTask(NULL)->tc_UserData = (APTR) priv;
+    return priv;
+}
+
+/* Closes a private base opened by amiga_open_private_socketbase() and
+ * resets tc_UserData back to NULL (safe no-op if lib is NULL, e.g. the
+ * open failed and the caller degraded to the shared SocketBase). Must
+ * be called from the SAME Task that opened it. */
+void amiga_close_private_socketbase(struct Library *lib)
+{
+    if (lib != NULL)
+    {
+        CloseLibrary(lib);
+        FindTask(NULL)->tc_UserData = NULL;
     }
 }

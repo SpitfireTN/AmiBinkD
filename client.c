@@ -63,7 +63,14 @@ static void alrm (int signo)
 
 #endif
 
-#if defined(HAVE_THREADS)
+#if defined(HAVE_THREADS) || defined(AMIGA)
+/* AMIGA case added in v10.5 alongside real concurrency (branch.c) - a
+ * finished concurrent session now PostSem()'s wakecmgr (see call()
+ * below) so the scheduler can promptly reuse the freed slot instead of
+ * waiting out whatever's left of the current sleep interval. wakecmgr
+ * itself (an EVENTSEM) has been real for AMIGA all along (sem.h), just
+ * never actually posted to before v10.5 since nothing ever finished
+ * mid-sleep under the old synchronous branch(). */
 #define SLEEP(x) WaitSem(&wakecmgr, x)
 #else
 #define SLEEP(x) sleep(x)
@@ -595,6 +602,31 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
         alarm(config->connect_timeout);
       }
 #endif
+      /* v10.8 and v10.10 both tried to give AMIGA a bounded connect()
+       * (non-blocking socket + select()-for-writability, then
+       * non-blocking socket + a re-issue-connect() poll loop) and both
+       * failed identically live: a connection that had genuinely
+       * completed at the TCP level (host-side socket state showed
+       * CLOSE-WAIT with the remote's reply already sitting unread) was
+       * never recognized as connected by either technique, hanging the
+       * process indefinitely regardless of connect_timeout. Since v10.10's
+       * own timeout bound was enforced by a plain local counter - not
+       * dependent on the emulator at all - and still never fired, the
+       * individual connect() calls themselves must have been blocking
+       * internally despite IoctlSocket(FIONBIO) reporting success, i.e.
+       * non-blocking connect() itself doesn't reliably work on this
+       * bsdsocket_emu, not just one particular way of polling for its
+       * completion. Reverted to plain blocking connect() - the same
+       * fully-synchronous call this port used successfully for months
+       * before v10.8 ever touched this file - relying on the host's own
+       * underlying TCP stack to bound a genuinely unresponsive remote
+       * (a real, finite kernel-level timeout, not configurable from here
+       * but not indefinite either) rather than anything AMIGA-specific.
+       * connect_timeout has no effect on AMIGA as of v10.11; left set in
+       * the deployed .cfg files as a harmless no-op rather than removed,
+       * in case a future toolchain/emulator fix makes it meaningful
+       * again. See manual.txt's v10.11 changelog entry before
+       * reintroducing any non-blocking-connect approach here. */
       if (connect (sockfd, ai->ai_addr, ai->ai_addrlen) == 0)
       {
 #if defined(HAVE_FORK) && !defined(HAVE_THREADS)
@@ -689,9 +721,29 @@ static void call (void *arg)
 #if defined(WITH_PERL) && defined(HAVE_THREADS)
   void *cperl;
 #endif
+#ifdef AMIGA
+  struct Library *privSocketBase;
+#endif
 
 #if defined(WITH_PERL) && defined(HAVE_THREADS)
   cperl = perl_init_clone(a->config);
+#endif
+#ifdef AMIGA
+  /* v10.12: this whole function runs in a branch()-spawned child, not
+   * the Process that opened the shared bsdsocket.library - which is
+   * exactly why every outbound connect() used to hang indefinitely
+   * despite the real TCP handshake completing in under a second (see
+   * amiga_glue.c's amiga_current_socketbase() and this session's
+   * changelog notes). Acquire a private base for the child's whole
+   * session lifetime, not just around connect() itself - call0() below
+   * also does DNS-cache-lookup-adjacent work and, on success, runs the
+   * full post-connect protocol() session before returning here. If the
+   * open fails, degrade to the shared SocketBase (today's, still-broken
+   * for connect(), behaviour) rather than aborting the poll outright -
+   * Log() already reaches the log file/console the same way either way. */
+  privSocketBase = amiga_open_private_socketbase ();
+  if (privSocketBase == NULL)
+    Log (1, "amiga_open_private_socketbase failed, falling back to shared bsdsocket.library");
 #endif
   if (bsy_add (&a->node->fa, F_CSY, a->config))
   {
@@ -706,6 +758,9 @@ static void call (void *arg)
 #if defined(WITH_PERL) && defined(HAVE_THREADS)
   perl_done_clone(cperl);
 #endif
+#ifdef AMIGA
+  amiga_close_private_socketbase (privSocketBase);
+#endif
   unlock_config_structure(a->config, 0);
   free (arg);
   rel_grow_handles(-6);
@@ -715,7 +770,20 @@ static void call (void *arg)
   if (poll_flag)
     PostSem(&wakecmgr);
   ENDTHREAD();
-#elif defined(DOS) || defined(DEBUGCHILD) || defined(AMIGA)
+#elif defined(AMIGA)
+  /* v10.5: was a bare --n_clients (fine only because branch() ran every
+   * session synchronously through v10.4, so this could never race).
+   * Real concurrent sessions (branch.c) need the same protection
+   * HAVE_THREADS already has - threadsafe() and the two EVENTSEMs were
+   * already implemented for AMIGA, just unused until now. No
+   * ENDTHREAD(): an AmigaOS process spawned via CreateNewProcTags just
+   * ends naturally when its entry function (branch.c's trampoline)
+   * returns. */
+  threadsafe(--n_clients);
+  PostSem(&eothread);
+  if (poll_flag)
+    PostSem(&wakecmgr);
+#elif defined(DOS) || defined(DEBUGCHILD)
   --n_clients;
 #endif
 }

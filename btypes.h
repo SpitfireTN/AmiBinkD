@@ -76,6 +76,7 @@ struct _FTN_NODE
 
   time_t hold_until;
   int busy;			       /* 0=free, 'c'=.csy, other=.bsy */
+  int bsy_fail_count;		       /* consecutive stale .csy/.bsy unlink failures (v10.3 give-up/backoff) */
   int mail_flvr;		       /* -1=no mail, other=it's flavour */
   int files_flvr;		       /* -1=no files, other=it's flavour */
 #ifdef BW_LIM

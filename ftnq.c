@@ -22,6 +22,7 @@
 #include "ftnq.h"
 #include "ftnnode.h"
 #include "ftnaddr.h"
+#include "bsy.h"
 #include "tools.h"
 #include "readdir.h"
 #include "iphdr.h"
@@ -41,11 +42,27 @@ FTNQ *q_add_file (FTNQ *q, char *filename, FTN_ADDR *fa1, char flvr, char action
  */
 static int qn_free (FTN_NODE *fn, void *arg)
 {
-  UNUSED_ARG(arg);
+  BINKD_CONFIG *config = arg;
 
   fn->hold_until = 0;
   fn->mail_flvr = fn->files_flvr = 0;
-  fn->busy = 0;
+
+  /* v10.5: don't clear busy for a node whose session is still actually
+   * running. qn_free() runs every time the queue gets rebuilt (see
+   * do_client()'s "if (!config->q_present)" check) - under the old
+   * always-synchronous branch() (through v10.4) that could never
+   * overlap with an in-flight session, but real concurrent sessions
+   * (branch.c) can now still be running when the queue empties and
+   * rebuilds. Blindly zeroing busy here let a second, spurious
+   * q_next_node() re-pick an in-flight node - harmless in practice
+   * (call()'s own bsy_add()/F_CSY check already no-ops the resulting
+   * duplicate dial attempt with "busy, skipping"), but this avoids the
+   * pointless wasted connection attempt and log noise by checking
+   * directly instead. bsy_test() returns nonzero when the node is
+   * actually free (no .csy lock file on disk). */
+  if (bsy_test (&fn->fa, F_CSY, config))
+    fn->busy = 0;
+
   return 0;
 }
 
@@ -75,7 +92,7 @@ void q_free (FTNQ *q, BINKD_CONFIG *config)
     }
   }
   else
-    foreach_node (qn_free, 0, config);
+    foreach_node (qn_free, config, config);
 }
 
 /*
@@ -420,11 +437,35 @@ void process_hld (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
   }
 }
 
+/*
+ * A stale .csy/.bsy that fails to unlink (e.g. a lock held open by a
+ * wedged earlier session) would otherwise be re-attempted on every
+ * rescan_delay forever, hogging the scheduler and - since only one
+ * session runs at a time - blocking every other node from being polled.
+ * After BSY_GIVEUP_TRIES consecutive failures for the same node, back
+ * off via the existing hold_node() mechanism instead of retrying
+ * immediately again.
+ */
+#define BSY_GIVEUP_TRIES 3
+#define BSY_GIVEUP_HOLD  300 /* seconds */
+
 static void process_bsy (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
 {
   char *s = path + strlen (path) - 4;
-  FTN_NODE *node;
+  FTN_NODE *node = get_node_info (fa, config);
   struct stat sb;
+
+  /* v10.6: a node under a give-up/backoff hold (set below) must not have
+   * its stale-file unlink re-attempted (or re-logged) on every rescan -
+   * that's what "holding Ns" was supposed to mean, but this function
+   * never actually checked node->hold_until, so the hold only ever
+   * stopped outbound dialing (see q_next_node()'s hold_until check) while
+   * this function kept hammering the same stuck lock file and spamming
+   * the log every rescan_delay regardless. Confirmed live: a wedged
+   * 80:774/0@retronet .bsy lock produced 4+ hours and 900+ "giving up"
+   * log lines in one night before this fix. */
+  if (node != NULL && node->hold_until > safe_time ())
+    return;
 
   if (stat (path, &sb) == 0 && config->kill_old_bsy != 0
       && time (0) - sb.st_mtime > config->kill_old_bsy)
@@ -433,11 +474,25 @@ static void process_bsy (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
 
     ftnaddress_to_str (buf, fa);
     Log (2, "found old %s file for %s", s, buf);
-    sdelete (path);
+    if (sdelete (path) == 0)
+    {
+      if (node != NULL)
+        node->bsy_fail_count = 0;
+    }
+    else if (node != NULL)
+    {
+      if (++node->bsy_fail_count >= BSY_GIVEUP_TRIES)
+      {
+        Log (1, "giving up removing stale %s for %s after %d tries, holding %ds",
+             s, buf, node->bsy_fail_count, BSY_GIVEUP_HOLD);
+        node->bsy_fail_count = 0;
+        hold_node (fa, time (0) + BSY_GIVEUP_HOLD, config);
+      }
+    }
   }
   else
   {
-    if ((node = get_node_info (fa, config)) != 0 && node->busy != 'b' &&
+    if (node != NULL && node->busy != 'b' &&
 	   (!STRICMP (s, ".bsy") || !STRICMP (s, ".csy")))
     {
       node->busy = tolower (s[1]);
@@ -973,6 +1028,19 @@ FTN_NODE *q_not_empty (BINKD_CONFIG *config)
     return 0;
 }
 
+/* v10.5 (real concurrent sessions, branch.c) design note: this and the
+ * rest of the FTNQ scan/pick machinery (q_scan/q_free/q_not_empty above)
+ * are called only from clientmgr's own single-threaded do_client() loop
+ * - server.c's inbound accept path never touches this queue at all, and
+ * nothing else calls into ftnq.c's node-picking functions. So despite
+ * sessions themselves now running concurrently, there is no actual
+ * concurrent-invocation race on q_next_node()/q_free() to guard against
+ * - a wrapping mutex here would protect a scenario that structurally
+ * can't occur with the current call graph, not a real one. The real
+ * concurrency-related fix needed was in qn_free() above: it used to
+ * unconditionally clear a node's in-memory busy flag on every queue
+ * rebuild, including for a node whose session (now possibly still
+ * running concurrently) hadn't finished - fixed there directly. */
 FTN_NODE *q_next_node (BINKD_CONFIG *config)
 {
   FTN_NODE *fn = q_not_empty (config);

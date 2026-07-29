@@ -63,17 +63,70 @@ Given that, this port starts from a clean upstream binkd checkout and
 replaces every ixemul-era assumption with something native, rather than
 patching the incomplete starting point piecemeal.
 
-## Key architectural decision: synchronous, one session at a time
+## Key architectural decision: real concurrency via `CreateNewProcTags` (v10.5+)
 
-Classic AmigaOS has no `fork()`/`pthreads` without ixemul. Upstream
-binkd already has a genuine fallback for platforms without either
-(`DOS` - see `branch.c`, `Config.h`): run each binkp session
-**synchronously**, in-process, no concurrency. `branch.c`'s AMIGA case
-now takes that same path instead of `ix_vfork()`. Practical effect: only
-one binkp session (inbound or outbound) can be active at a time. This is
-an honest, working v1 - true AmigaOS-native concurrency (spawning real
-CLI processes via `CreateNewProcTags`) would be a real follow-up project,
-not something to bolt on for a first build.
+Classic AmigaOS has no `fork()`/`pthreads` without ixemul, but it does
+have `CreateNewProcTags()` (dos.library) - the native primitive for
+spawning a second running unit of execution. Classic AmigaOS is a single
+flat shared address space across all tasks/processes (no fork()-style
+copy-on-write isolation), so a process spawned this way behaves much
+closer to a thread than to a Unix `fork()` - it shares the parent's
+globals, heap, and open library bases directly.
+
+Through v10.4, `branch.c`'s AMIGA case instead ran each binkp session
+**synchronously**, in-process, taking the same fallback path upstream
+binkd already has for platforms without `fork()`/threads (`DOS` - see
+`Config.h`). That was an honest, working v1: only one binkp session
+(inbound or outbound) could be active at a time. v10.5 replaced it with
+a real `CreateNewProcTags(NP_Entry=...)` spawn per session, making
+genuine concurrent sessions possible (e.g. an inbound connection arriving
+while an outbound poll is already in flight, or multiple networks polled
+back-to-back without waiting on each other).
+
+Getting this right took more than just calling `CreateNewProcTags`:
+
+- **Argument handoff with no built-in mechanism.** `NP_Entry` takes a
+  bare function pointer - no `void*` parameter like `pthread_create()`.
+  The child is spawned at `NP_Priority` one below the parent's current
+  priority (`me->tc_Node.ln_Pri - 1`); AmigaOS's strictly
+  priority-preemptive scheduler guarantees a ready lower-priority task
+  never runs while a ready higher-priority task hasn't blocked, so the
+  parent can safely write `newproc->pr_Task.tc_UserData` immediately
+  after `CreateNewProcTags()` returns, with zero risk of the child
+  observing it uninitialized - no semaphore/signal handshake needed. (An
+  earlier design draft tried reusing `SIGF_SINGLE` as a signal-based
+  handshake - wrong, since `SIGF_SINGLE` and `SIGF_BLIT`, graphics.
+  library's blitter-arbitration signal, are the same physical bit per
+  `exec/tasks.h`.)
+- **`bsdsocket.library` per-Process access.** Roadshow's bsdsocket.library
+  denies socket access to any Process other than the one that originally
+  opened it, unless the opener calls
+  `SocketBaseTagList(SBTC_CAN_SHARE_LIBRARY_BASES, TRUE, TAG_DONE)`
+  (`amiga_glue.c`'s `amiga_socket_init()`) - without this, every session
+  process but the first would silently fail to use sockets at all.
+- **Shutdown ordering.** A `CreateNewProcTags(NP_Entry=...)` child has no
+  `pr_SegList` of its own - only the parent's segment list references the
+  code it's running. `exitfunc()`'s AMIGA drain loop therefore waits
+  *indefinitely* (with periodic progress logging) for `n_servers`/
+  `n_clients` to reach zero before actually exiting, rather than giving up
+  after a few seconds the way the `HAVE_THREADS` case does - exiting out
+  from under a still-running child risks it executing freed memory.
+- **Existing thread-safety infrastructure**, already active for AMIGA but
+  previously unexercised since `branch()` never spawned anything
+  concurrent: `threadsafe()`, `MUTEXSEM`/`EVENTSEM`, `bsy_list`'s and
+  `ftnnode.c`'s own dedicated semaphores, `config_sem`. A few genuinely
+  unprotected spots were found and fixed alongside the new spawn path: the
+  bare `--n_servers`/`--n_clients` decrements at session end (`server.c`/
+  `client.c`), and `ftnq.c`'s `qn_free()` unconditionally clearing every
+  node's in-memory `busy` flag on queue rebuild even for nodes whose
+  sessions might still be running (now checks `bsy_test()` first).
+
+**Accepted, documented limitations of this first concurrent release**:
+`errno` (libnix's `__errno`) is a single unprotected global shared across
+all concurrently-running Processes, and `mypid` (CRAM-MD5 nonce seed) and
+`rand()`'s internal state are likewise shared/racy across concurrent
+sessions - all judged low-severity and out of scope for this release. See
+`manual.txt` section 05 for the full user-facing writeup.
 
 ## Toolchain
 
@@ -87,8 +140,12 @@ make
 
 ## What had to change vs. plain upstream binkd, and why
 
-- **`branch.c`**: AMIGA case now runs synchronously (same path as `DOS`)
-  instead of calling ixemul's `ix_vfork()`.
+- **`branch.c`**: AMIGA case now spawns each binkp session as a real
+  AmigaOS Process via `CreateNewProcTags()` (v10.5+; ran synchronously,
+  same path as `DOS`, through v10.4) instead of calling ixemul's
+  `ix_vfork()`. See the architectural-decision section above for the
+  argument-handoff, `bsdsocket.library`-sharing, and shutdown-ordering
+  details this required.
 - **`Config.h`**: its `#error "You must define HAVE_FORK or HAVE_THREADS"`
   now also accepts `AMIGA` as a valid third option.
 - **`sem.h` / `amiga/sem.c`**: AMIGA had a `MUTEXSEM` type and
@@ -250,13 +307,15 @@ the C code is at fault:
    older `ndk13-include` variant that doesn't declare it). Only polls (in
    1s steps) for the rarer case of a caller wanting to block indefinitely.
 6. **Reverse DNS (`backresolv`) on a private/non-routable IP can hang
-   the whole session** - not an Amiberry bug exactly, but a real trap:
-   with `backresolv` enabled, an inbound connection from a LAN address
-   (e.g. `192.168.x.x`) triggers a synchronous reverse-lookup that can
-   never resolve, blocking the entire session (and everything else,
-   given the synchronous concurrency model) until the *remote* side's own
-   protocol timeout gives up first. `backresolv` is purely cosmetic
-   (nicer hostnames in the log) - fine to leave disabled.
+   the session** - not an Amiberry bug exactly, but a real trap: with
+   `backresolv` enabled, an inbound connection from a LAN address (e.g.
+   `192.168.x.x`) triggers a synchronous reverse-lookup that can never
+   resolve, blocking that session until the *remote* side's own protocol
+   timeout gives up first. Through v10.4's synchronous-only concurrency
+   model this blocked everything else too; since v10.5's real concurrency
+   it only blocks the one affected session process, but it's still a
+   session that never completes on its own. `backresolv` is purely
+   cosmetic (nicer hostnames in the log) - fine to leave disabled.
 7. **`n_clients` silently never decremented for AMIGA** (`client.c`'s
    `call()`) - same class of bug as `n_servers` in `serv()` (`server.c`),
    but not harmless like that one: `n_servers`'s only consumer
@@ -289,6 +348,55 @@ the C code is at fault:
    and translating `IoErr()` to a real `errno` via a small switch
    (`EEXIST`/`ENOENT`/`EBUSY`/`ENOSPC`/`EROFS`/`EXDEV`/`EINVAL`/`ENOMEM`,
    `EIO` fallback).
+9. **UDP/datagram sockets don't reliably work at all** - discovered while
+   chasing finding #11 below. A standalone test program doing nothing but
+   `OpenLibrary("bsdsocket.library")` + `socket(AF_INET, SOCK_DGRAM, 0)`
+   + one UDP send/receive hung indefinitely, twice, on two different
+   instance ages (including immediately after a full guest reboot) -
+   frozen before any actual network I/O, meaning the problem is in
+   `bsdsocket_emu`'s own socket handling, not anything DNS/UDP-protocol
+   specific. This project has no current use for UDP (BinkP is TCP-only)
+   so it's undeveloped rather than fixed - noted here so nobody reaches
+   for a UDP-based feature on this platform without testing it in
+   isolation first.
+10. **A blocking `bsdsocket.library` call's internal completion
+    notification never reaches a spawned, non-opener Process** - the
+    hardest bug in this whole project, and the real explanation behind
+    what looked like several separate problems. Since v10.5, every
+    outbound `connect()` (and, it turned out, every `gethostbyname()`
+    call too) runs inside a `CreateNewProcTags`-spawned child
+    (`branch.c`) that isn't the Process that originally opened
+    `bsdsocket.library` (`amiga_glue.c`'s `amiga_socket_init()`, called
+    once in the top-level process, with `SBTC_CAN_SHARE_LIBRARY_BASES`
+    opted in so children can use that same shared instance at all - see
+    the concurrency section above). That function's own comment already
+    flagged the relevant documented tradeoff
+    (`SBTC_SIGIOMASK`-style per-Process signal delivery only reaches
+    "whichever Process last configured it") but reasoned only about
+    `select()`, which this codebase already uses in bounded-polling mode,
+    not signal-wait mode. It missed that a *blocking* library call's own
+    internal completion notification likely depends on that exact same
+    mechanism - so a spawned child's blocking `connect()`/
+    `gethostbyname()` call never gets woken up, even though the real
+    underlying operation (confirmed via a live `tcpdump` capture: TCP
+    handshake and the remote's data both completing in well under a
+    second) succeeds just fine at the kernel level the whole time. Two
+    non-blocking-socket workarounds (`select()`-based, then a manual
+    poll-loop) were both tried first and both failed identically live,
+    which is what proved this wasn't about blocking-vs-non-blocking
+    connect() at all. Fixed by giving each spawned child its own
+    private, unshared `bsdsocket.library` instance for its whole session
+    - redefining `BSDSOCKET_BASE_NAME` (the macro all ~40 of
+    `bsdsocket.library`'s call-site stubs resolve through) to a function,
+    `amiga_current_socketbase()`, that returns a Task's own private base
+    (stashed in `tc_UserData`) if it opened one, or falls back to the
+    existing shared base otherwise - so every other Process (the
+    top-level opener, inbound session children, which were never
+    affected since their I/O is already non-blocking+`select()`-based)
+    sees zero behavior change. Confirmed live across all 7 configured
+    networks, an overnight soak with zero failures, and (once the same
+    diagnosis was applied to `gethostbyname()` too) a further two-day,
+    two-reboot soak with ~60 clean poll cycles per network.
 
 ## Deployment gotcha: AmigaDOS script comments are `;`, not `#`
 
@@ -312,12 +420,25 @@ standalone.
 - No DNS SRV-record lookups (see `srv_gai.c` note above).
 - `run3()`'s piped external-transport feature is stubbed (logs and
   returns failure) - not a core binkp/FTN feature, only one caller.
-- True concurrency (more than one binkp session at once) - see the
-  synchronous-execution decision above.
-- Multi-day/production-scale soak testing - a single overnight
-  (~7 hour, 30-minute-interval) unattended run across all seven
-  networks is confirmed clean (see "Soak test results" below), but that
-  is one night, not weeks of real production volume.
+- Multi-day/production-scale soak testing - the single overnight run
+  documented below (pre-v10.5, synchronous path) has since been followed
+  by two more, covering the concurrency path itself: an overnight soak
+  right after finding #10's real fix landed (14/14 clean cycles/network,
+  zero failures), and a two-day, two-reboot soak validating the same fix
+  also covers `gethostbyname()` (~60 clean cycles/network total, one
+  non-reproducing blip on the first reboot only). Still not weeks of
+  real production volume, but no longer just one night either.
+- `errno`'s exposure at every `TCPERR()`/`TCPERRNO` call site besides the
+  `getpeername()`/`getsockname()` critical section fixed for real
+  concurrent load (`client.c`'s outbound connect/socket/bind, `server.c`'s
+  servmgr setup, `iptools.c`'s ioctl paths) - same class of shared-global
+  race as finding #10 above, but for `errno` specifically rather than
+  bsdsocket.library's internal notification mechanism. Unconfirmed as an
+  active problem at these other sites, not yet fixed.
+- `backresolv` (reverse/PTR lookups) is disabled in this BBS's deployed
+  configs as a precaution, even though finding #10's fix likely also
+  covers it (same call class, same spawned-child pattern) - just hasn't
+  actually been re-tested live the way outbound `gethostbyname()` was.
 - The `.csy`/`.bsy` busy-flag file routinely fails to unlink
   (`error unlinking '...csy': Text file busy`) - the overnight soak
   test confirms this fires on essentially *every* session, one

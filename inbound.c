@@ -35,8 +35,11 @@
 /* Removes both xxxxx.hr and it's xxxxx.dt */
 static void remove_hr (char *path)
 {
+  struct stat sb;
+
   strcpy (strrchr (path, '.'), ".dt");
-  delete (path);
+  if (stat (path, &sb) == 0)
+    delete (path);
   strcpy (strrchr (path, '.'), ".hr");
   delete (path);
 }
