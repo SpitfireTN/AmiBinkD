@@ -101,4 +101,9 @@ void free_nodes(BINKD_CONFIG *config);
 #endif
 int poll_node (char *s, BINKD_CONFIG *config);
 
+/*
+ * Create polls for every callable node in the config (`-P ALL')
+ */
+int poll_all_nodes (BINKD_CONFIG *config);
+
 #endif

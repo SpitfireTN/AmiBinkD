@@ -413,6 +413,76 @@ int poll_node (char *s, BINKD_CONFIG *config)
 }
 
 /*
+ * `-P ALL' support: create a poll for every node we could actually call,
+ * so one config plus one command line can service every network instead
+ * of one -P<uplink> invocation (and one config) per network.
+ *
+ * A node is pollable if it has a host to call -- q_not_empty() ignores
+ * hosts == "-" nodes anyway, so making polls for them would just litter
+ * the outbound with .dlo files nothing ever picks up.  Our own addresses
+ * are skipped too, in case one of them is also listed as a node.
+ */
+struct pollall {
+  BINKD_CONFIG *config;
+  int made;                            /* polls created */
+  int skipped;                         /* nodes with no host to call */
+};
+
+static int poll_all_node (FTN_NODE *node, void *arg)
+{
+  struct pollall *pa = (struct pollall *) arg;
+  char buf[FTN_ADDR_SZ + 1];
+  int i;
+
+  if (node == NULL)                    /* defnode lookup failed */
+    return 0;
+
+  for (i = 0; i < pa->config->nAddr; ++i)
+    if (!ftnaddress_cmp (&node->fa, pa->config->pAddr + i))
+      return 0;                        /* that's us */
+
+  ftnaddress_to_str (buf, &node->fa);
+
+  if (!node->hosts || !strcmp (node->hosts, "-"))
+  {
+    Log (4, "ALL: skipping %s, no host to call", buf);
+    ++pa->skipped;
+    return 0;
+  }
+
+  Log (4, "creating a poll for %s (`%c' flavour)", buf, POLL_NODE_FLAVOUR);
+  if (create_poll (&node->fa, POLL_NODE_FLAVOUR, pa->config))
+    ++pa->made;
+
+  return 0;
+}
+
+/*
+ * Create polls for all configured nodes (`-P ALL'), returns the number
+ * of polls created (0 -- nothing to poll)
+ */
+int poll_all_nodes (BINKD_CONFIG *config)
+{
+  struct pollall pa;
+
+  pa.config = config;
+  pa.made = pa.skipped = 0;
+
+  foreach_node (poll_all_node, &pa, config);
+
+  if (pa.skipped)
+    Log (3, "ALL: created %i poll(s), skipped %i node(s) with no host",
+         pa.made, pa.skipped);
+  else
+    Log (3, "ALL: created %i poll(s)", pa.made);
+
+  if (pa.made == 0)
+    Log (1, "`-P ALL': no pollable nodes in the config");
+
+  return pa.made;
+}
+
+/*
  * Free pNodArray
  * Semaphoring is not needed
  */

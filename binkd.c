@@ -191,7 +191,7 @@ void usage (void)
 #elif defined(WIN32) && !defined(BINKD9X)
 	  "T"
 #endif
-	  "pqrsvmh] [-P node]"
+	  "pqrsvmh] [-P node|ALL]"
 #if defined(WIN32)
 	  " [-S name] [-t cmd]"
 #endif
@@ -217,7 +217,7 @@ void usage (void)
 	  "  -S name  set WindowsNT service name\n"
 #endif
 	  );
-  printf ("  -P node  poll a node\n"
+  printf ("  -P node  poll a node ('-P ALL' polls every node in the config)\n"
 	  "  -p       run client only, poll, quit\n"
 	  "  -q       be quiet\n"
 	  "  -r       disable crypt traffic\n"
@@ -595,7 +595,7 @@ int main (int argc, char *argv[])
   else
     Log (4, "BEGIN standalone, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #elif defined(AMIGA)
-  Log (4, "BEGIN, C-Net/5 Amiga Pro AmiBinkd v10.14 " MYNAME "/" MYVER "%s", tmp);
+  Log (4, "BEGIN, C-Net/5 Amiga Pro AmiBinkd v10.15 " MYNAME "/" MYVER "%s", tmp);
 #else
   Log (4, "BEGIN, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #endif
@@ -657,7 +657,12 @@ int main (int argc, char *argv[])
   { /* Create polls and release polls list */
     struct maskchain *psP;
     for (psP = psPolls.first; psP; psP = psP->next)
-      poll_node (psP->mask, current_config);
+      /* `-P ALL' polls every node in the config, so a single config and a
+       * single invocation can service every network at once */
+      if (!STRICMP (psP->mask, "ALL"))
+        poll_all_nodes (current_config);
+      else
+        poll_node (psP->mask, current_config);
     simplelist_free(&psPolls.linkpoint, destroy_maskchain);
   }
 

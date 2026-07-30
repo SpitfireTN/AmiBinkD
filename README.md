@@ -22,7 +22,8 @@ real FTN addresses/domains):
   password - a config issue, not a bug), and correctly returns to
   waiting for the next connection afterward - the original hang this
   port fought hardest to fix.
-- **Multi-node polling in one invocation** (`-P addr1 -P addr2 ...`), and
+- **Multi-node polling in one invocation** (`-P addr1 -P addr2 ...`, or
+  `-P ALL` for every node in the config as of v10.15 - see below), and
   the equivalent pattern of polling each network via its own `Execute
   <net>.scr` in sequence from a driver script (`FTN_Poll`): confirmed
   working through all seven configured networks in one run, including
@@ -412,6 +413,54 @@ header comments (leftover from a Unix-shell-style template) that made
 calling `FTN_Poll` chain - which looked identical to a code-level hang
 until the exact stopping point was isolated by running each `.scr`
 standalone.
+
+## `-P ALL`: one config, one invocation, every network (v10.15)
+
+Upstream binkd's `-P` takes one FTN address per switch, so this BBS drove
+it the way the "Status" section above describes: one `.cfg` **and** one
+`.scr` per network (`cnet.cfg` + `cnet.scr`, `fidonet.cfg` +
+`fidonet.scr`, ...), invoked in sequence by `FTN_Poll`. Seven networks
+meant fourteen files to keep in step, and every config-wide change (a new
+`inbound` path, a `loglevel` bump, disabling `backresolv`) had to be made
+seven times. FidoBlitz, the other Amiga binkp mailer on this system,
+instead accepts `fidoblitz -p -PALL fidoblitz.cfg` - one config listing
+every uplink, one command that polls all of them.
+
+v10.15 adds the same thing here, so `AmiBinkd -p -PALL AmiBinkd:AmiBinkd.cfg`
+polls every network in one run (`rofftn.scr`). `AmiBinkd.cfg` already
+listed all seven domains/addresses/nodes because the **server** side
+(`ChkAmiBinkDSvr` -> `AmiBinkd -s AmiBinkd.cfg`) has always used the
+merged config; this makes the client side use the same one file.
+
+Implementation (`poll_all_nodes()` in `ftnnode.c`, dispatched from
+`binkd.c`'s poll-creation loop when the `-P` argument is `ALL`,
+case-insensitively): iterate the config's node array with the existing
+`foreach_node()` and `create_poll()` for each, i.e. the same
+per-node work `poll_node()` already did, minus the address parsing.
+`ALL` can't collide with a real `-P` argument because it isn't a valid
+Fido-style address - the old code path would just have logged
+"`ALL` cannot be parsed as a Fido-style address".
+
+Two nodes are deliberately skipped rather than polled:
+
+- **Nodes with no host to call** (`hosts` unset or `-`). `q_not_empty()`
+  already refuses to call those, so creating polls for them would only
+  litter the outbound with `.dlo` files nothing ever picks up. Logged at
+  loglevel 4 and counted in the summary line.
+- **Our own addresses** (anything in `config->pAddr`), in case one is
+  also listed as a `node`.
+
+Note the concurrency consequence, which is a config matter rather than a
+code one: with every uplink pollable in a single run, the clientmgr will
+spawn up to `maxclients` outbound sessions at once, and the default is
+100 - i.e. all seven networks simultaneously, where the per-`.scr`
+pattern was strictly one at a time. This BBS's `AmiBinkd.cfg` now sets
+`maxclients 2` (what `fidoblitz.cfg` uses for the same node list) plus
+`call-delay 5`, because `do_client()` sleeps `call_delay` - default 60s -
+every time it finds `maxclients` sessions already running, which would
+otherwise idle a full minute between each pair of polls. The per-network
+`.cfg`/`.scr` files are untouched and still work if a single network ever
+needs to be polled by itself.
 
 ## Not done yet
 
