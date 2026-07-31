@@ -45,9 +45,32 @@ int ext_rand = 0;
 SOCKET sockfd[MAX_LISTENSOCK];
 int sockfd_used = 0;
 
+#ifdef AMIGA
+/* What servmgr hands an inbound session child: a ReleaseSocket() transfer
+ * id rather than a descriptor (descriptors are meaningless across
+ * SocketBases), plus the address family needed to re-create it. See the
+ * long comment at the ReleaseSocket() call in do_server(). */
+typedef struct {
+  int id;
+  int family;
+} serv_handoff_t;
+
+/* bsdsocket.library's "allocate me an unused transfer id" sentinel for
+ * ReleaseSocket(). Defined here for the same reason branch.c declares
+ * CreateNewProcTags() itself: this toolchain's headers don't provide it. */
+#ifndef UNIQUE_ID
+#define UNIQUE_ID (-1)
+#endif
+#endif
+
 static void serv (void *arg)
 {
+#ifdef AMIGA
+  int h;
+  struct Library *privSocketBase;
+#else
   int h = *(int *) arg;
+#endif
   BINKD_CONFIG *config;
 #if defined(WITH_PERL) && defined(HAVE_THREADS)
   void *cperl;
@@ -58,6 +81,37 @@ static void serv (void *arg)
   pidcmgr = 0;
   for (curfd=0; curfd<sockfd_used; curfd++)
     soclose(sockfd[curfd]);
+#endif
+
+#ifdef AMIGA
+  /* v10.16: claim our own bsdsocket.library instance, then re-materialise
+   * the socket servmgr released to us inside it. Both halves matter: the
+   * private base is what makes WaitSelect()'s readiness signals actually
+   * arrive in *this* Process (see do_server()'s ReleaseSocket() comment),
+   * and ObtainSocket() is what turns servmgr's transfer id back into a
+   * descriptor that is valid here. */
+  {
+    serv_handoff_t ho = *(serv_handoff_t *) arg;
+    LONG got;
+
+    privSocketBase = amiga_open_private_socketbase ();
+    if (privSocketBase == NULL)
+      Log (1, "amiga_open_private_socketbase failed, falling back to shared bsdsocket.library");
+
+    got = ObtainSocket ((LONG) ho.id, ho.family, SOCK_STREAM, 0);
+    if (got < 0)
+    {
+      Log (1, "serv ObtainSocket(): %s", TCPERR ());
+      amiga_close_private_socketbase (privSocketBase);
+      free (arg);
+      rel_grow_handles (-6);
+      threadsafe(--n_servers);
+      PostSem(&eothread);
+      return;
+    }
+    h = (int) got;
+    add_socket (h);
+  }
 #endif
 
   config = lock_current_config();
@@ -71,6 +125,11 @@ static void serv (void *arg)
 #endif
   del_socket(h);
   soclose (h);
+#ifdef AMIGA
+  /* After soclose(): the socket lives in this private base, so the base
+   * has to outlive it. */
+  amiga_close_private_socketbase (privSocketBase);
+#endif
   free (arg);
   unlock_config_structure(config, 0);
   rel_grow_handles (-6);
@@ -98,6 +157,9 @@ static int do_server(BINKD_CONFIG *config)
   struct addrinfo *ai, *aiHead, hints;
   int aiErr;
   SOCKET new_sockfd;
+#ifdef AMIGA
+  serv_handoff_t serv_handoff;
+#endif
   int pid;
   socklen_t client_addr_len;
   struct sockaddr_storage client_addr;
@@ -311,6 +373,64 @@ static int do_server(BINKD_CONFIG *config)
         }
   
         /* Creating a new process for the incoming connection */
+#ifdef AMIGA
+        /* v10.16: hand the accepted socket to the child rather than let it
+         * borrow ours.
+         *
+         * servmgr runs in the Process that opened bsdsocket.library
+         * (binkd.c calls servmgr() directly), so accept() here is fine.
+         * The child spawned below is a different Process, and until now it
+         * used the shared SocketBase for this socket. v10.12 fixed exactly
+         * this ambiguity for outbound connect() but reasoned that "the
+         * shared select()-based I/O path never depended on signal delivery
+         * in the first place" and left inbound alone. That reasoning was
+         * wrong: amiga_glue.c's select() is implemented on WaitSelect(),
+         * which *is* a signal-wait, and its readiness signals go to
+         * whichever Process the library last associated as the caller --
+         * not this child. The result was an inbound session that queued
+         * its greeting, never flushed a byte, never read the peer's reply,
+         * and never timed out, holding the server slot forever and
+         * blocking every later connection until a restart.
+         *
+         * ReleaseSocket() detaches the socket from our SocketBase and
+         * returns a transfer id; the child re-materialises it in its own
+         * private base with ObtainSocket(). This is bsdsocket.library's
+         * documented way to move a socket between Processes. Past this
+         * point new_sockfd holds that id, not a descriptor. */
+        {
+          LONG relid = ReleaseSocket (new_sockfd, (LONG) UNIQUE_ID);
+
+          del_socket (new_sockfd);
+          if (relid < 0)
+          {
+            Log (1, "servmgr ReleaseSocket(): %s", TCPERR ());
+            soclose (new_sockfd);
+            rel_grow_handles (-6);
+            continue;
+          }
+          serv_handoff.id     = (int) relid;
+          /* Read the family through struct sockaddr: on AMIGA
+           * sockaddr_storage is rfc2553.h's sockaddr_in stand-in, which has
+           * no ss_family member. */
+          serv_handoff.family = ((struct sockaddr *) &client_addr)->sa_family;
+        }
+        threadsafe(++n_servers);
+        if ((pid = branch (serv, (void *) &serv_handoff, sizeof (serv_handoff))) < 0)
+        {
+          /* Take the socket back so it is not orphaned inside
+           * bsdsocket.library with no owner to ever close it. */
+          SOCKET back = (SOCKET) ObtainSocket ((LONG) serv_handoff.id,
+                                               serv_handoff.family,
+                                               SOCK_STREAM, 0);
+          if (back != INVALID_SOCKET)
+            soclose (back);
+          rel_grow_handles (-6);
+          threadsafe(--n_servers);
+          PostSem(&eothread);
+          Log (1, "servmgr branch(): cannot branch out");
+          sleep(1);
+        }
+#else
         threadsafe(++n_servers);
         if ((pid = branch (serv, (void *) &new_sockfd, sizeof (new_sockfd))) < 0)
         {
@@ -322,6 +442,7 @@ static int do_server(BINKD_CONFIG *config)
           Log (1, "servmgr branch(): cannot branch out");
           sleep(1);
         }
+#endif
         else
         {
           Log (5, "started server #%i, id=%i", n_servers, pid);

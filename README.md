@@ -21,7 +21,11 @@ real FTN addresses/domains):
   runs the full session (or a clean auth failure for a wrong per-node
   password - a config issue, not a bug), and correctly returns to
   waiting for the next connection afterward - the original hang this
-  port fought hardest to fix.
+  port fought hardest to fix. **This only genuinely worked as of
+  v10.16**: through v10.15 every inbound session silently transmitted
+  nothing and hung, taking the listener with it. See the dedicated
+  section below - it is the single most important thing to understand
+  before touching the AmigaOS socket glue.
 - **Multi-node polling in one invocation** (`-P addr1 -P addr2 ...`, or
   `-P ALL` for every node in the config as of v10.15 - see below), and
   the equivalent pattern of polling each network via its own `Execute
@@ -413,6 +417,85 @@ header comments (leftover from a Unix-shell-style template) that made
 calling `FTN_Poll` chain - which looked identical to a code-level hang
 until the exact stopping point was isolated by running each `.scr`
 standalone.
+
+## The inbound sessions never worked until v10.16 (and how the v10.12 fix half-missed it)
+
+This is the most consequential bug the port has had, and it hid behind a
+plausible-sounding assumption for four releases.
+
+**Symptom.** Every inbound session logged `incoming from ...` and
+`incoming session with ...`, then produced *nothing* — no error, no
+timeout, no close. Meanwhile the remote gave up with `Session timeout` /
+`Authorization failed`. Because a hung session never released the server
+slot, the second connection after a restart was refused outright, so
+inbound mail died within minutes of every start and only a restart
+appeared to "fix" it. Outbound polling was flawless throughout, which is
+exactly what made this so easy to misread as a network or peer problem.
+
+**What the sockets showed.** The decisive measurement was on the host,
+not in the log:
+
+    ESTAB  Recv-Q 285  ...:24554 <- peer     bytes_received:285  (no bytes sent at all)
+
+The peer's greeting had arrived and was never read, and *we had never put
+a byte on the wire* — despite the log dutifully printing `send message
+NUL SYS ...`. Those log lines record frames being queued into the output
+buffer, not transmitted. Both halves of the session's I/O were dead, not
+just the read side.
+
+**Cause.** `servmgr` runs in the Process that opened
+`bsdsocket.library` (binkd.c calls `servmgr()` directly), so `accept()`
+is fine. Each session is then spawned as its own Process by `branch()` —
+and that child went on using the *shared* `SocketBase` for a socket it
+did not own.
+
+v10.12 diagnosed precisely this ambiguity for outbound `connect()` and
+fixed it with a private per-child library base, but explicitly exempted
+inbound on the reasoning that the shared "select()-based I/O path ...
+never depended on signal delivery in the first place". That was wrong:
+`amiga_glue.c`'s `select()` is implemented on **`WaitSelect()`**, which
+*is* a signal-wait. Its readiness signals go to whichever Process the
+library last associated as "the caller" — never the child. So the child's
+`select()` never reported the socket readable *or* writable, and the
+session sat forever.
+
+**Fix.** AmigaOS descriptors are meaningless across `SocketBase`s, so the
+socket has to be *transferred* rather than shared — `bsdsocket.library`'s
+documented mechanism for exactly this:
+
+- `do_server()`, after `accept()`: `ReleaseSocket(fd, UNIQUE_ID)` detaches
+  the socket and returns a transfer id. That id, plus the address family,
+  is what `branch()` hands the child. If `branch()` fails the parent
+  re-`ObtainSocket()`s it, so the socket is never orphaned inside the
+  library with no owner left to close it.
+- `serv()`, in the child: `amiga_open_private_socketbase()` first, then
+  `ObtainSocket(id, family, SOCK_STREAM, 0)` to re-materialise the socket
+  inside that private base. The base is closed *after* `soclose()`, since
+  the socket lives in it.
+
+Non-AMIGA builds keep the original path untouched under `#else`.
+
+**A symptom that looked like a second bug.** While inbound was broken,
+stalled sessions also never honoured `timeout` (`nettimeout`,
+`DEF_TIMEOUT` = 5 min), lingering 46 minutes and longer. That needed no
+separate fix: the timeout is driven by the same `select()` loop that was
+dead. With `select()` working, a dead-air probe session now tears itself
+down in ten seconds.
+
+**Verified live** (2026-07-31, v10.16): five consecutive real inbound
+sessions from the hub in 44 seconds, full handshake and CRAM-MD5 auth,
+two packets received into `Inbound/`, clean `downing server...` teardown
+each time, no leftover `.bsy` locks, listener still accepting afterwards.
+Outbound unchanged — the same run's 5:00a poll pulled 13 files /
+45,581 bytes from fidonet.
+
+**Lesson for anyone extending this port:** any Process that is not the
+one which opened `bsdsocket.library` must have its own library base, and
+must obtain its sockets through `ReleaseSocket`/`ObtainSocket`. Sharing a
+base across Processes via `SBTC_CAN_SHARE_LIBRARY_BASES` makes calls
+*succeed* while silently breaking everything that depends on per-Process
+signal delivery — which includes `WaitSelect()`, not merely blocking
+`connect()`.
 
 ## `-P ALL`: one config, one invocation, every network (v10.15)
 

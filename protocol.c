@@ -2822,7 +2822,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
 
 #ifdef AMIGA
   msg_sendf (state, M_NUL,
-    "VER C-Net/5 AmiBinkd v10.15-" PRTCLNAME "/" PRTCLVER);
+    "VER C-Net/5 AmiBinkd v10.16-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());
