@@ -4,7 +4,48 @@ A native AmigaOS 3.x port of [binkd](https://github.com/pgul/binkd), the
 FTN (FidoNet Technology Network) mailer, built without ixemul.library or
 ixnet.library.
 
-## Status: working on real Amiberry, both directions confirmed, soak-tested clean
+---
+
+## ⚠ Do not deploy v10.16 — use v10.15
+
+**v10.16 is not fit for production and its upgrade advice is withdrawn.**
+The inbound fix it describes below is real and the diagnosis is sound, but
+the release is incomplete: on a system that actually receives inbound
+connections it is **worse than v10.15**.
+
+What happens: inbound sessions now start running (they never did before),
+but a session can still hang, and every hung session permanently leaks an
+AmigaOS Process, a socket and a bsdsocket.library instance. On the author's
+own system 107 of 128 sessions leaked in twelve hours. Those leaked sessions
+hold `.bsy` lock files, which in turn made the BBS's own poll script abort
+before it ever launched the mailer — outbound mail stopped for eleven hours
+and the only visible symptom was `error: 8` in the event log.
+
+v10.15 has broken inbound too (it always did, silently, since v10.5), but it
+fails safe: the server stops accepting after the first hang, so nothing
+accumulates and outbound keeps working.
+
+**If you carry FTN mail with this port, stay on v10.15 until a fixed release
+is published.**
+
+Work in progress, not yet released: unique socket-transfer ids (Amiberry's
+`ReleaseSocket(fd, UNIQUE_ID)` returns the same id every call), a guard on
+`ftello()` returning -1 (which was being sent as a resume offset of
+18446744073709551615, the actual cause of the hang), and detection of a
+partial belonging to another live session. With those, a full night ran with
+inbound working and no outbound failures — but one leak path remains open
+and one unexplained restart is unaccounted for, so it is not shipped.
+
+Separately, and worth doing whatever mailer you run: if your BBS event script
+deletes `.bsy`/`.csy` files before polling, make sure a failed delete cannot
+abort the script. On AmigaDOS that means wrapping those deletes in
+`FAILAT 21` / `FAILAT 10`. A lock file held by a live session is enough to
+kill the whole event otherwise, and `kill-old-bsy` already sweeps stale
+locks for you.
+
+---
+
+## Status: inbound confirmed working only in the unreleased WIP build; v10.15 is the recommended release
 
 Cross-compiles and links cleanly into a loadable AmigaOS binary
 (`amibinkd`), zero references to ixemul/ixnet anywhere in the binary.
