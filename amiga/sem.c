@@ -36,6 +36,14 @@ int _LockSem(void *vpSem) {
   return (0);
 }
 
+/* Non-blocking acquire. AttemptSemaphore() returns nonzero if it got the
+ * semaphore and zero if another Task holds it; it never waits, so a caller
+ * that can afford to skip its work (bsy_touch()) cannot be stranded behind
+ * whoever currently holds the lock. See bsy_touch() for why that matters. */
+int _TryLockSem(void *vpSem) {
+  return AttemptSemaphore ((struct SignalSemaphore *)vpSem) ? 1 : 0;
+}
+
 int _ReleaseSem(void *vpSem) {
   ReleaseSemaphore ((struct SignalSemaphore *)vpSem);
   return (0);

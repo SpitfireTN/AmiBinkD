@@ -79,6 +79,13 @@ int _LockSem (void *);
 int _ReleaseSem (void *);
 
 /*
+ *    Try to lock a semaphore without blocking.
+ *    Returns nonzero if the lock was taken, 0 if it was already held.
+ */
+
+int _TryLockSem (void *);
+
+/*
  *    Initialise Event Semaphores.
  */
 
@@ -106,6 +113,7 @@ int _CleanEventSem (void *);
   #define InitSem(sem)       pthread_mutex_init(sem, NULL)
   #define CleanSem(sem)      pthread_mutex_destroy(sem)
   #define LockSem(sem)       pthread_mutex_lock(sem)
+  #define TryLockSem(sem)    (pthread_mutex_trylock(sem) == 0)
   #define ReleaseSem(sem)    pthread_mutex_unlock(sem)
   #define InitEventSem(sem)  (pthread_cond_init(&((sem)->cond), NULL), pthread_mutex_init(&((sem)->mutex), NULL))
   #define PostSem(sem)       (LockSem(&((sem)->mutex)), pthread_cond_signal(&((sem)->cond)), ReleaseSem(&((sem)->mutex)))
@@ -115,6 +123,14 @@ int _CleanEventSem (void *);
   #define InitSem(vpSem) _InitSem(vpSem)
   #define CleanSem(vpSem) _CleanSem(vpSem)
   #define LockSem(vpSem) _LockSem(vpSem)
+  #if defined(AMIGA)
+    #define TryLockSem(vpSem) _TryLockSem(vpSem)
+  #else
+  /* WIN32/OS2 have no _TryLockSem implementation here: keep their existing
+   * blocking behaviour rather than pretend at a non-blocking acquire. Only
+   * the AmigaOS port has the stranding problem this is here to solve. */
+    #define TryLockSem(vpSem) (LockSem(vpSem), 1)
+  #endif
   #define ReleaseSem(vpSem) _ReleaseSem(vpSem)
   #define InitEventSem(vpSem) _InitEventSem(vpSem)
   #define PostSem(vpSem) _PostSem(vpSem)
@@ -124,6 +140,7 @@ int _CleanEventSem (void *);
   #define InitSem(vpSem)
   #define CleanSem(vpSem)
   #define LockSem(vpSem)
+  #define TryLockSem(vpSem) (1)
   #define ReleaseSem(vpSem)
   #define InitEventSem(vpSem)
   #define PostSem(vpSem)

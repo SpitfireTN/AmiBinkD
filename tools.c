@@ -329,8 +329,17 @@ void vLog (int lev, char *s, va_list ap)
       int i;
 
       LockSem(&lsem);
+      /* AMIGA: pause between retries. Ten fopen()s back-to-back take
+       * microseconds, so a task holding the log for even a few ms makes
+       * every attempt fail and the message is dropped silently below --
+       * which cost real diagnostic evidence on 2026-08-02 and loses log
+       * lines for sysops whenever sessions overlap. See amiga/msleep.c. */
       for (i = 0; logfile == 0 && i < 10; ++i)
+      {
+        if (i)
+          LOG_RETRY_DELAY ();
         logfile = fopen (using_logpath, "a");
+      }
       if (logfile)
       {
         fprintf (logfile, "%s%c %02d %s %02d:%02d:%02d [%u] %s\n",
@@ -565,6 +574,10 @@ char *parse_args (int argc, char *argv[], char *src, char *ID)
 /*
  * Set times for a file, 0 == success, -1 == error
  */
+/* AMIGA: touch() lives in amiga/touch.c -- the generic utime() below
+ * blocks indefinitely on this port and was the cause of the long-hunted
+ * inb_done() hang (caught 2026-08-02). See that file for the evidence. */
+#ifndef AMIGA
 int touch (char *file, time_t t)
 {
 #ifndef OS2
@@ -604,6 +617,7 @@ int touch (char *file, time_t t)
   return (r!=0);
 #endif
 }
+#endif /* !AMIGA */
 
 /*
  * Replaces all entries of a in s for b, returns edited line.
@@ -661,7 +675,7 @@ int delete (char *path)
 {
   int rc;
 
-  if ((rc = unlink (path)) != 0)
+  if ((rc = UNLINK (path)) != 0)
     Log (1, "error unlinking `%s': %s", path, strerror (errno));
   else
     Log (5, "unlinked `%s'", path);
@@ -695,7 +709,7 @@ int sdelete (char *path)
   int i, rc;
 
   for (i=0; i<5; i++) {
-    if ((rc = unlink (path)) == 0) {
+    if ((rc = UNLINK (path)) == 0) {
       Log (6, "unlinked `%s'", path);
       return 0;
     }

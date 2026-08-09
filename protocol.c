@@ -158,8 +158,19 @@ static int close_partial (STATE *state, BINKD_CONFIG *config)
   if (state->in.f)
   {
     s = ftello (state->in.f);
-    Log (1, "receiving of %s interrupted at %" PRIuMAX, state->in.netname,
-         (uintmax_t) s);
+    /* Same ftello()-can-fail case as in the M_GET path below: on AmigaOS
+     * the partial may be held open by another session. Report it as such
+     * instead of printing (uintmax_t)-1 as "interrupted at
+     * 18446744073709551615", and treat it as "nothing usable received". */
+    if (s < 0)
+    {
+      Log (1, "receiving of %s interrupted, offset unknown (%s)",
+           state->in.netname, strerror (errno));
+      s = 0;
+    }
+    else
+      Log (1, "receiving of %s interrupted at %" PRIuMAX, state->in.netname,
+           (uintmax_t) s);
     if (ispkt (state->in.netname))
     {
       Log (2, "%s: partial .pkt", state->in.netname);
@@ -2025,12 +2036,31 @@ static int start_file_recv (STATE *state, char *args, int sz, BINKD_CONFIG *conf
 
     if (off_req || offset != ftello (state->in.f))
     {
+      /* ftello() can legitimately fail here on AmigaOS: the partial we
+       * are holding may belong to another session that has it open for
+       * writing, and AmigaOS write-opens are exclusive, so our handle is
+       * unusable. Unguarded, the (uintmax_t) casts below turn that -1
+       * into 18446744073709551615 and we ask the remote to resume from
+       * an offset it can never satisfy -- it stops sending, we keep
+       * waiting, and the session hangs forever holding a server slot.
+       * That was the inbound wedge chased through v10.16. If we cannot
+       * say where we are in the file, we have no basis to resume: drop
+       * the partial and take the file from the start instead. */
+      boff_t have = ftello (state->in.f);
+
+      if (have < 0)
+      {
+        Log (1, "cannot determine offset in partial %s (%s) - restarting it",
+             state->in.netname, strerror (errno));
+        have = 0;
+      }
+
       Log (2, "have %" PRIuMAX " byte(s) of %s",
-           (uintmax_t) ftello (state->in.f), state->in.netname);
+           (uintmax_t) have, state->in.netname);
       msg_sendf (state, M_GET, "%s %" PRIuMAX " %" PRIuMAX " %" PRIuMAX,
                  state->in.netname,
                  (uintmax_t) state->in.size, (uintmax_t) state->in.time,
-                 (uintmax_t) ftello (state->in.f));
+                 (uintmax_t) have);
       ++state->GET_FILE_balance;
       fclose (state->in.f);
       TF_ZERO (&state->in);
@@ -2784,6 +2814,12 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
+  /* DIAG: inbound sessions reach "banner in" and stop. All the markers
+   * before it balance, so the stall is inside here. Prime suspect is
+   * safe_localtime() -> localtime(), which does timezone file I/O inside
+   * threadsafe() -- a global lock every session needs -- and file calls
+   * blocking on AmigaOS is exactly what utime()/unlink() did. */
+  Log (2, "DIAG banner: MD challenge in");
   if (!no_MD5 && !state->to &&
       (state->MD_challenge = MD_getChallenge(NULL, state)) != NULL)
   {  /* Answering side MUST send CRAM message as a very first M_NUL */
@@ -2795,14 +2831,19 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   else
     state->MD_flag = 0;
 
+  Log (2, "DIAG banner: MD challenge out, sending SYS/ZYZ/LOC/NDL");
   msg_send2 (state, M_NUL, "SYS ", config->sysname);
   msg_send2 (state, M_NUL, "ZYZ ", config->sysop);
   msg_send2 (state, M_NUL, "LOC ", config->location);
   msg_send2 (state, M_NUL, "NDL ", config->nodeinfo);
 
+  Log (2, "DIAG banner: NUL sends done, safe_time in");
   t = safe_time();
+  Log (2, "DIAG banner: safe_time out, tz_off in");
   tz = tz_off(t, config->tzoff);
+  Log (2, "DIAG banner: tz_off out, safe_localtime in");
   safe_localtime (&t, &tm);
+  Log (2, "DIAG banner: safe_localtime out");
 
 #if 0
   sprintf (szLocalTime, "%s, %2d %s %d %02d:%02d:%02d %c%02d%02d (%s)",
@@ -2818,11 +2859,13 @@ static int banner (STATE *state, BINKD_CONFIG *config)
             (tz>=0) ? '+' : '-', abs(tz)/60, abs(tz)%60);
 #endif
 
+  Log (2, "DIAG banner: sending TIME");
   msg_send2 (state, M_NUL, "TIME ", szLocalTime);
+  Log (2, "DIAG banner: TIME sent, sending VER");
 
 #ifdef AMIGA
   msg_sendf (state, M_NUL,
-    "VER C-Net/5 AmiBinkd v10.16-" PRTCLNAME "/" PRTCLVER);
+    "VER C-Net/5 AmiBinkd v10.17-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());
@@ -2839,7 +2882,9 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   }
 #endif
 
+  Log (2, "DIAG banner: VER sent, send_ADR in");
   if (state->to || !state->delay_ADR) send_ADR (state, config);
+  Log (2, "DIAG banner: send_ADR out, banner complete");
 
   if (state->to) {
     szOpt = xstrdup(" NDA EXTCMD");
@@ -3065,7 +3110,7 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   STATE state;
   struct timeval tv;
   fd_set r, w;
-  int no, rd;
+  int no, rd, diag_pass;
 #ifdef WIN32
   unsigned long t_out = 0;
   unsigned long u_nettimeout = config->nettimeout*1000000l;
@@ -3196,7 +3241,15 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   /* v10.7: same peernamesem protection as the getpeername() call above -
    * getsockname()'s TCPERR() read is just as exposed to a sibling
    * session's errno clobbering it first. */
+  /* DIAG: sessions arriving in a batch log "incoming session with" (just
+   * above) and then nothing at all, stranding with the peer's greeting
+   * unread. This lock and the getnameinfo() inside it are the first thing
+   * they hit. If one session blocks in there while holding peernamesem,
+   * every sibling piles up on LockSem and looks identical from the log.
+   * Markers at level 2 so they survive loglevel 2. */
+  Log (2, "DIAG sess: peernamesem wait");
   LockSem (&peernamesem);
+  Log (2, "DIAG sess: peernamesem held");
   if (state.pipe || getsockname (socket_in, (struct sockaddr *)&peer_name, &peer_name_len) == -1)
   {
     if (!state.pipe && !binkd_exit)
@@ -3205,9 +3258,11 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   }
   else
   {
+    Log (2, "DIAG sess: getnameinfo in");
     status = getnameinfo((struct sockaddr *)&peer_name, peer_name_len,
 		ownhost, sizeof(ownhost),
 		ownserv, sizeof(ownserv), NI_NUMERICHOST | NI_NUMERICSERV);
+    Log (2, "DIAG sess: getnameinfo out (status %d)", status);
     if (status == 0)
     {
       state.our_ip=ownhost;
@@ -3216,8 +3271,13 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
     else
       Log(2, "Error in getnameinfo(): %s (%d)", gai_strerror(status), status);
   }
+  Log (2, "DIAG sess: peernamesem releasing");
   ReleaseSem (&peernamesem);
 
+  Log (2, "DIAG sess: banner in");
+  /* DIAG: sessions complete banner() then die. Mark only the first two
+   * passes of the main loop -- logging every iteration would flood. */
+  diag_pass = 0;
   if (banner (&state, config) == 0) ;
   else if (n_servers > config->max_servers && !to)
   {
@@ -3353,12 +3413,26 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
         }
         else
 #endif
+        {
+          if (diag_pass < 2)
+            Log (2, "DIAG loop: pass %i SELECT in (timeout %lus)",
+                 diag_pass, (unsigned long) tv.tv_sec);
           no = SELECT ((socket_in > socket_out ? socket_in : socket_out) + 1, &r, &w, 0, &tv);
+          if (diag_pass < 2)
+            Log (2, "DIAG loop: pass %i SELECT out (rc=%i)", diag_pass, no);
+        }
         if (no < 0)
           save_err = TCPERR ();
         Log (8, "selected %i (r=%i, w=%i)", no, FD_ISSET (socket_in, &r), FD_ISSET (socket_out, &w));
       }
+      if (diag_pass < 2)
+        Log (2, "DIAG loop: pass %i bsy_touch in", diag_pass);
       bsy_touch (config);                       /* touch *.bsy's */
+      if (diag_pass < 2)
+      {
+        Log (2, "DIAG loop: pass %i bsy_touch out", diag_pass);
+        ++diag_pass;
+      }
       if (no == 0
 #ifdef BW_LIM
           && !limited

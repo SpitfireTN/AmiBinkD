@@ -151,6 +151,27 @@
   #define RENAME(f,t) rename(f,t)
 #endif
 
+#ifdef AMIGA
+  /* Sub-second pause between log-open retries -- see amiga/msleep.c. */
+  extern void amiga_msleep (int ms);
+  #define LOG_RETRY_DELAY() amiga_msleep(40)
+#else
+  #define LOG_RETRY_DELAY() do { } while (0)
+#endif
+
+#ifdef AMIGA
+  /* The C runtime's unlink() can block forever on a file another task
+   * holds, instead of returning an error -- it stalled an outbound poll
+   * for 40+ minutes inside sdelete() on 2026-08-02, which in turn stalled
+   * CNet's event scheduler. DeleteFile() is bounded and reports a proper
+   * error, which is what sdelete()'s retry loop expects. See
+   * amiga/delete.c. */
+  extern int o_unlink (const char *path);
+  #define UNLINK(p) o_unlink(p)
+#else
+  #define UNLINK(p) unlink(p)
+#endif
+
 #ifdef VISUALCPP
   #define sleep(a) Sleep((a)*1000)
   #define pipe(h)  _pipe(h, 0, 64)

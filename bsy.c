@@ -28,7 +28,7 @@ struct _BSY_ADDR
   BSY_ADDR *next;
   FTN_ADDR fa;
   bsy_t bt;
-#ifndef UNIX
+#if !defined(UNIX) && !defined(AMIGA)
   int h;
 #endif
 };
@@ -84,7 +84,28 @@ int bsy_add (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 
       new_bsy->bt = bt;
 
-#ifndef UNIX
+/* AmigaOS is grouped with UNIX for the .bsy/.csy handle below.
+ *
+ * Every other non-UNIX platform keeps the lock file open (BSY_ADDR.h) and
+ * relies on that handle to stop anyone else deleting it. That cannot work
+ * here. AmigaOS file handles are per-Process, exactly like sockets, and
+ * since v10.5 each session is its own Process while bsy_list is a plain
+ * global shared by all of them (classic AmigaOS has one flat address
+ * space -- no fork() copy-on-write). So a Process closing bsy->h for a
+ * cell some *other* Process created closes an unrelated descriptor in its
+ * own table; the real handle stays open, and AmigaOS will not delete an
+ * open file. That is the routine
+ *
+ *     error unlinking `...bsy': Text file busy
+ *
+ * left behind after concurrent inbound sessions -- and those leftover
+ * locks are what made CNet's FTN_Poll script abort at its `Delete #?.bsy'
+ * step, taking outbound mail down with them.
+ *
+ * UNIX has never kept the handle, because the exclusive create_sem_file()
+ * IS the lock. That reasoning holds identically on AmigaOS, so take the
+ * same path rather than inventing a per-Process handle table. */
+#if !defined(UNIX) && !defined(AMIGA)
       new_bsy->h = open(buf, O_RDONLY|O_NOINHERIT);
       if (new_bsy->h == -1)
         Log (2, "Can't open %s: %s!", buf, strerror(errno));
@@ -140,7 +161,7 @@ void bsy_remove (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
     {
       if (!ftnaddress_cmp (&bsy->fa, fa0) && bsy->bt == bt)
       {
-#ifndef UNIX
+#if !defined(UNIX) && !defined(AMIGA)
 	if (bsy->h != -1)
 	  if (close(bsy->h))
             Log (2, "Can't close %s (handle %d): %s!", buf, bsy->h, strerror(errno));
@@ -186,7 +207,7 @@ void bsy_remove_all (BINKD_CONFIG *config)
     if (*buf)
     {
       strnzcat (buf, bsy->bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
-#ifndef UNIX
+#if !defined(UNIX) && !defined(AMIGA)
       if (bsy->h != -1)
         if (close(bsy->h))
           Log (2, "Can't close %s (handle %d): %s!", buf, bsy->h, strerror(errno));
@@ -212,26 +233,106 @@ void bsy_remove_all (BINKD_CONFIG *config)
 void bsy_touch (BINKD_CONFIG *config)
 {
   static time_t last_touch = 0;
+  BSY_ADDR *cur;
 
-  LockSem (&sem);
-  if (time (0) - last_touch > BSY_TOUCH_DELAY)
-  {
-    BSY_ADDR *bsy;
-    char buf[MAXPATHLEN + 1];
+  /* Cheap check BEFORE taking the lock.
+   *
+   * Every session calls this on every pass of the protocol main loop, so
+   * with N concurrent sessions it was N global-semaphore acquisitions per
+   * pass purely to discover there is nothing to do yet -- the timer test
+   * used to live inside the critical section. On AmigaOS that contention
+   * was enough to strand sessions here: instrumentation on 2026-08-07
+   * recorded 251 entries to bsy_touch() against 152 exits, i.e. 99
+   * sessions went in and never came out, while SELECT() immediately
+   * before it balanced perfectly (250 in / 251 out).
+   *
+   * It is self-amplifying, which matches the observed curve: stranded
+   * sessions keep their .bsy entries, so bsy_list grows, so each pass
+   * holds the lock longer, so more sessions strand. Skipping the lock
+   * entirely on the ~99.9% of calls that have no work removes it.
+   *
+   * Safe as double-checked locking: last_touch is only advanced under the
+   * lock, and the worst case of a stale read is touching the files one
+   * pass early or late, which BSY_TOUCH_DELAY already tolerates. */
+  if (time (0) - last_touch <= BSY_TOUCH_DELAY)
+    return;
 
-    for (bsy = bsy_list; bsy; bsy = bsy->next)
-    {
-      ftnaddress_to_filename (buf, &bsy->fa, config);
-      if (*buf)
-      {
-	strnzcat (buf, bsy->bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
-	if (touch (buf, time (0)) == -1)
-          Log (1, "touch %s: %s", buf, strerror (errno));
-	else
-	  Log (6, "touched %s", buf);
-      }
-    }
-    last_touch = time (0);
+  /* The double-checked lock above was not enough on its own (measured
+   * again 2026-08-08: 236 entries to 136 exits, 100 sessions stranded
+   * here, while the SELECT() immediately before balanced 236/235). Cutting
+   * the *number* of acquisitions does nothing about the shape of the bug:
+   * this is a single global semaphore held across filesystem I/O, so one
+   * session that blocks inside touch() -- or inside the Log() next to it,
+   * on a filesystem that routinely returns ETXTBSY here -- pins the
+   * semaphore, and every sibling then blocks forever in ObtainSemaphore()
+   * on the next pass of its protocol main loop. One stuck file operation
+   * takes down every concurrent session, which is exactly the observed
+   * ratchet: n_servers climbs monotonically until it hits max_servers and
+   * all inbound is refused.
+   *
+   * Two changes, either of which alone would break that chain:
+   *
+   *   1. Never block acquiring this lock. Touching .bsy files is periodic
+   *      cosmetic maintenance (it stops peers ageing our locks out); a
+   *      skipped pass costs nothing, and BSY_TOUCH_DELAY already tolerates
+   *      being early or late. AttemptSemaphore() over ObtainSemaphore().
+   *
+   *   2. Do not hold the lock across the I/O at all. Claim the pass, copy
+   *      out what is needed, release, and touch the files unlocked.
+   *
+   * With both, a session that hangs in touch() strands only itself and
+   * leaves the semaphore free, instead of taking every sibling with it. */
+  if (!TryLockSem (&sem))
+    return;
+
+  if (time (0) - last_touch <= BSY_TOUCH_DELAY)
+  {                                     /* someone else claimed this pass */
+    ReleaseSem (&sem);
+    return;
   }
+
+  /* Claim the pass before any I/O, so siblings take the cheap early-out at
+   * the top of this function rather than queueing up behind us. */
+  last_touch = time (0);
+  cur = bsy_list;
   ReleaseSem (&sem);
+
+  /* Walk unlocked. Cells are never freed -- bsy_get_free_cell() reuses
+   * FA_ZERO'd ones -- so `cur' stays valid across the unlocked window, and
+   * bsy_add() only ever prepends, so it cannot splice anything into the
+   * part of the list still ahead of us. A cell that a concurrent
+   * bsy_remove() clears while we are walking just gets skipped. */
+  for (; cur; cur = cur->next)
+  {
+    char buf[MAXPATHLEN + 1];
+    FTN_ADDR fa;
+    bsy_t bt;
+
+    if (!TryLockSem (&sem))
+      return;                   /* contended: drop the rest of this pass */
+    if (FA_ISNULL (&cur->fa))
+    {
+      ReleaseSem (&sem);
+      continue;
+    }
+    memcpy (&fa, &cur->fa, sizeof (fa));
+    bt = cur->bt;
+    ReleaseSem (&sem);
+
+    ftnaddress_to_filename (buf, &fa, config);
+    if (*buf)
+    {
+      strnzcat (buf, bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
+      if (touch (buf, time (0)) != -1)
+        Log (6, "touched %s", buf);
+      /* Touching unlocked means a concurrent bsy_remove() can sdelete()
+       * this file between the copy above and the touch. That race is
+       * benign and expected -- the lock is gone precisely so it can be --
+       * so don't report it at the level real touch failures use. */
+      else if (errno == ENOENT)
+        Log (6, "touch %s: gone (removed concurrently)", buf);
+      else
+        Log (1, "touch %s: %s", buf, strerror (errno));
+    }
+  }
 }

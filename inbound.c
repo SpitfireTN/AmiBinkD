@@ -258,6 +258,9 @@ FILE *inb_fopen (STATE *state, BINKD_CONFIG *config)
   struct stat sb;
   FILE *f;
   int fd;
+#ifdef AMIGA
+  int retried_fresh = 0;
+#endif
 
   if (!find_tmp_name (buf, &(state->in), state, config))
     return 0;
@@ -274,6 +277,37 @@ fopen_again:
     return 0;
   }
   fseeko(f, 0, SEEK_END);               /* Work-around MSVC bug */
+
+#ifdef AMIGA
+  /* Prove the handle is usable before building a session on it.
+   * find_tmp_name() will adopt a partial that another session is still
+   * receiving into -- creat_tmp_name() closes the .hr as soon as it is
+   * written, so a live session's .hr reads fine while its .dt stays open.
+   * On Amiberry's filesystem the open() above SUCCEEDS in that case and
+   * hands back a handle whose every later operation returns EPERM, so this
+   * is the only reliable detection point. A partial we cannot seek in is
+   * not ours to resume: drop it and take a fresh temp name, receiving from
+   * the start. Guarded so a genuinely broken inbound directory reports an
+   * error rather than looping. */
+  if (ftello (f) < 0)
+  {
+    if (!retried_fresh)
+    {
+      Log (3, "%s is in use by another session, taking a fresh temp name", buf);
+      retried_fresh = 1;
+      fclose (f);
+      if (!creat_tmp_name (buf, &(state->in), state->fa,
+                           config->temp_inbound[0] ? config->temp_inbound
+                                                   : state->inbound))
+        return 0;
+      strcpy (strrchr (buf, '.'), ".dt");
+      goto fopen_again;
+    }
+    Log (1, "%s: unusable handle: %s", buf, strerror (errno));
+    fclose (f);
+    return 0;
+  }
+#endif
 
 #if defined(OS2)
   DosSetFHState(fileno(f), OPEN_FLAGS_NOINHERIT);
@@ -466,11 +500,20 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
   *real_name = 0;
   netname = file->netname;
 
+  /* v10.16-diag: step markers through the commit path. Sessions hang here
+   * with the .dt complete on disk and NOTHING logged after "receiving",
+   * so the stall is in one of the calls below that are silent on success:
+   * find_tmp_name(), check_pkthdr(), touch(), or the first RENAME().
+   * Level 2 so they survive loglevel 2. Remove once located. */
+  Log (2, "DIAG inb_done: enter, netname=%s", netname);
+
   if (find_tmp_name (tmp_name, file, state, config) != 1)
   {
     Log (1, "missing tmp file for %s!", netname);
     return 0;
   }
+
+  Log (2, "DIAG inb_done: find_tmp_name OK -> %s", tmp_name);
 
   strnzcpy (real_name, state->inbound, MAXPATHLEN);
   strnzcat (real_name, PATH_SEPARATOR, MAXPATHLEN);
@@ -511,7 +554,11 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
   {
     /* check pkt file header */
     if (ispkt (netname))
+    {
+      Log (2, "DIAG inb_done: check_pkthdr in");
       check_pkthdr(state, netname, tmp_name, real_name, config);
+      Log (2, "DIAG inb_done: check_pkthdr out");
+    }
 
     s = real_name + strlen (real_name);
 
@@ -523,8 +570,10 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
       ren_style = RENAME_BODY;
     }
 
+    Log (2, "DIAG inb_done: touch in");
     if (touch (tmp_name, file->time) != 0)
       Log (1, "touch %s: %s", tmp_name, strerror (errno));
+    Log (2, "DIAG inb_done: touch out, RENAME in -> %s", real_name);
 
     while (RENAME (tmp_name, real_name))
     {
@@ -557,6 +606,7 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
         return 0;
       }
     }
+    Log (2, "DIAG inb_done: RENAME out");
     Log (2, "%s -> %s", netname, real_name);
   }
 

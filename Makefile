@@ -38,7 +38,7 @@ SRCS =  binkd.c tools.c ftnaddr.c ftndom.c ftnnode.c ftnq.c \
         readcfg.c readflo.c prothlp.c iptools.c rfc2553.c run.c binlog.c \
         exitproc.c getw.c xalloc.c setpttl.c https.c md5b.c crypt.c \
         compress.c srif.c pmatch.c getopt.c \
-        amiga_glue.c amiga/rename.c amiga/getfree.c amiga/sem.c
+        amiga_glue.c amiga/rename.c amiga/getfree.c amiga/sem.c amiga/touch.c amiga/delete.c amiga/msleep.c
 # srv_gai.c deliberately excluded - its srv_getaddrinfo() is only for
 # platforms with a real resolver (HAVE_RESOLV_H/WITH_FTS5004), which
 # AmigaOS has neither of. srv_gai.h's own macro fallback

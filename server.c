@@ -57,10 +57,28 @@ typedef struct {
 
 /* bsdsocket.library's "allocate me an unused transfer id" sentinel for
  * ReleaseSocket(). Defined here for the same reason branch.c declares
- * CreateNewProcTags() itself: this toolchain's headers don't provide it. */
+ * CreateNewProcTags() itself: this toolchain's headers don't provide it.
+ *
+ * NOT USED for the handoff -- see next_handoff_id. Kept only to document
+ * what the sentinel is, because reaching for it is the obvious mistake. */
 #ifndef UNIQUE_ID
 #define UNIQUE_ID (-1)
 #endif
+
+/* We allocate our own transfer ids rather than asking bsdsocket.library
+ * for one with UNIQUE_ID.
+ *
+ * Amiberry's bsdsocket_emu returns the *same* id (65536) from every
+ * ReleaseSocket(fd, UNIQUE_ID) call, so with more than one session being
+ * handed off at once -- which is precisely what fixing inbound made
+ * possible -- several sockets end up released under one id and the
+ * children racing to ObtainSocket() it can pick up the wrong socket, or
+ * one child can consume another's. Confirmed live: five concurrent
+ * inbound sessions all logged `released ... as id 65536'.
+ *
+ * An explicit, monotonically increasing id per handoff removes the race
+ * and costs nothing on a stack that does allocate unique ids properly. */
+static LONG next_handoff_id = 0;
 #endif
 
 static void serv (void *arg)
@@ -99,6 +117,8 @@ static void serv (void *arg)
       Log (1, "amiga_open_private_socketbase failed, falling back to shared bsdsocket.library");
 
     got = ObtainSocket ((LONG) ho.id, ho.family, SOCK_STREAM, 0);
+    Log (2, "handoff: child base=%p obtained id %i -> fd %li",
+         (void *) privSocketBase, ho.id, (long) got);
     if (got < 0)
     {
       Log (1, "serv ObtainSocket(): %s", TCPERR ());
@@ -128,6 +148,8 @@ static void serv (void *arg)
 #ifdef AMIGA
   /* After soclose(): the socket lives in this private base, so the base
    * has to outlive it. */
+  Log (2, "handoff: child closing fd %i, base=%p, n_servers=%i",
+       h, (void *) privSocketBase, n_servers);
   amiga_close_private_socketbase (privSocketBase);
 #endif
   free (arg);
@@ -398,7 +420,12 @@ static int do_server(BINKD_CONFIG *config)
          * documented way to move a socket between Processes. Past this
          * point new_sockfd holds that id, not a descriptor. */
         {
-          LONG relid = ReleaseSocket (new_sockfd, (LONG) UNIQUE_ID);
+          LONG myid, relid;
+
+          /* 0x51000000 base: just a value no other subsystem on this
+           * machine is likely to have released a socket under. */
+          threadsafe (myid = 0x51000000 + (++next_handoff_id));
+          relid = ReleaseSocket (new_sockfd, myid);
 
           del_socket (new_sockfd);
           if (relid < 0)
@@ -408,11 +435,16 @@ static int do_server(BINKD_CONFIG *config)
             rel_grow_handles (-6);
             continue;
           }
-          serv_handoff.id     = (int) relid;
+          /* Use the id we asked for, not the return value: a stack that
+           * honours an explicit id returns it unchanged, but do not
+           * depend on that. */
+          serv_handoff.id     = (int) myid;
           /* Read the family through struct sockaddr: on AMIGA
            * sockaddr_storage is rfc2553.h's sockaddr_in stand-in, which has
            * no ss_family member. */
           serv_handoff.family = ((struct sockaddr *) &client_addr)->sa_family;
+          Log (2, "handoff: released fd %i as id %li (family %i), n_servers=%i",
+               (int) new_sockfd, (long) relid, serv_handoff.family, n_servers);
         }
         threadsafe(++n_servers);
         if ((pid = branch (serv, (void *) &serv_handoff, sizeof (serv_handoff))) < 0)
