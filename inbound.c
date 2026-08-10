@@ -500,20 +500,12 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
   *real_name = 0;
   netname = file->netname;
 
-  /* v10.16-diag: step markers through the commit path. Sessions hang here
-   * with the .dt complete on disk and NOTHING logged after "receiving",
-   * so the stall is in one of the calls below that are silent on success:
-   * find_tmp_name(), check_pkthdr(), touch(), or the first RENAME().
-   * Level 2 so they survive loglevel 2. Remove once located. */
-  Log (2, "DIAG inb_done: enter, netname=%s", netname);
-
   if (find_tmp_name (tmp_name, file, state, config) != 1)
   {
     Log (1, "missing tmp file for %s!", netname);
     return 0;
   }
 
-  Log (2, "DIAG inb_done: find_tmp_name OK -> %s", tmp_name);
 
   strnzcpy (real_name, state->inbound, MAXPATHLEN);
   strnzcat (real_name, PATH_SEPARATOR, MAXPATHLEN);
@@ -555,9 +547,7 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
     /* check pkt file header */
     if (ispkt (netname))
     {
-      Log (2, "DIAG inb_done: check_pkthdr in");
       check_pkthdr(state, netname, tmp_name, real_name, config);
-      Log (2, "DIAG inb_done: check_pkthdr out");
     }
 
     s = real_name + strlen (real_name);
@@ -576,12 +566,9 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
      * depends on the datestamp. */
     if (config->set_file_dates)
     {
-      Log (2, "DIAG inb_done: touch in");
       if (touch (tmp_name, file->time) != 0)
         Log (1, "touch %s: %s", tmp_name, strerror (errno));
-      Log (2, "DIAG inb_done: touch out");
     }
-    Log (2, "DIAG inb_done: RENAME in -> %s", real_name);
 
     while (RENAME (tmp_name, real_name))
     {
@@ -614,7 +601,6 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
         return 0;
       }
     }
-    Log (2, "DIAG inb_done: RENAME out");
     Log (2, "%s -> %s", netname, real_name);
   }
 

@@ -2817,12 +2817,6 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-  /* DIAG: inbound sessions reach "banner in" and stop. All the markers
-   * before it balance, so the stall is inside here. Prime suspect is
-   * safe_localtime() -> localtime(), which does timezone file I/O inside
-   * threadsafe() -- a global lock every session needs -- and file calls
-   * blocking on AmigaOS is exactly what utime()/unlink() did. */
-  Log (2, "DIAG banner: MD challenge in");
   if (!no_MD5 && !state->to &&
       (state->MD_challenge = MD_getChallenge(NULL, state)) != NULL)
   {  /* Answering side MUST send CRAM message as a very first M_NUL */
@@ -2834,19 +2828,14 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   else
     state->MD_flag = 0;
 
-  Log (2, "DIAG banner: MD challenge out, sending SYS/ZYZ/LOC/NDL");
   msg_send2 (state, M_NUL, "SYS ", config->sysname);
   msg_send2 (state, M_NUL, "ZYZ ", config->sysop);
   msg_send2 (state, M_NUL, "LOC ", config->location);
   msg_send2 (state, M_NUL, "NDL ", config->nodeinfo);
 
-  Log (2, "DIAG banner: NUL sends done, safe_time in");
   t = safe_time();
-  Log (2, "DIAG banner: safe_time out, tz_off in");
   tz = tz_off(t, config->tzoff);
-  Log (2, "DIAG banner: tz_off out, safe_localtime in");
   safe_localtime (&t, &tm);
-  Log (2, "DIAG banner: safe_localtime out");
 
 #if 0
   sprintf (szLocalTime, "%s, %2d %s %d %02d:%02d:%02d %c%02d%02d (%s)",
@@ -2862,9 +2851,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
             (tz>=0) ? '+' : '-', abs(tz)/60, abs(tz)%60);
 #endif
 
-  Log (2, "DIAG banner: sending TIME");
   msg_send2 (state, M_NUL, "TIME ", szLocalTime);
-  Log (2, "DIAG banner: TIME sent, sending VER");
 
 #ifdef AMIGA
   msg_sendf (state, M_NUL,
@@ -2885,9 +2872,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   }
 #endif
 
-  Log (2, "DIAG banner: VER sent, send_ADR in");
   if (state->to || !state->delay_ADR) send_ADR (state, config);
-  Log (2, "DIAG banner: send_ADR out, banner complete");
 
   if (state->to) {
     szOpt = xstrdup(" NDA EXTCMD");
@@ -3113,7 +3098,7 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   STATE state;
   struct timeval tv;
   fd_set r, w;
-  int no, rd, diag_pass;
+  int no, rd;
 #ifdef WIN32
   unsigned long t_out = 0;
   unsigned long u_nettimeout = config->nettimeout*1000000l;
@@ -3244,15 +3229,7 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   /* v10.7: same peernamesem protection as the getpeername() call above -
    * getsockname()'s TCPERR() read is just as exposed to a sibling
    * session's errno clobbering it first. */
-  /* DIAG: sessions arriving in a batch log "incoming session with" (just
-   * above) and then nothing at all, stranding with the peer's greeting
-   * unread. This lock and the getnameinfo() inside it are the first thing
-   * they hit. If one session blocks in there while holding peernamesem,
-   * every sibling piles up on LockSem and looks identical from the log.
-   * Markers at level 2 so they survive loglevel 2. */
-  Log (2, "DIAG sess: peernamesem wait");
   LockSem (&peernamesem);
-  Log (2, "DIAG sess: peernamesem held");
   if (state.pipe || getsockname (socket_in, (struct sockaddr *)&peer_name, &peer_name_len) == -1)
   {
     if (!state.pipe && !binkd_exit)
@@ -3261,11 +3238,9 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   }
   else
   {
-    Log (2, "DIAG sess: getnameinfo in");
     status = getnameinfo((struct sockaddr *)&peer_name, peer_name_len,
 		ownhost, sizeof(ownhost),
 		ownserv, sizeof(ownserv), NI_NUMERICHOST | NI_NUMERICSERV);
-    Log (2, "DIAG sess: getnameinfo out (status %d)", status);
     if (status == 0)
     {
       state.our_ip=ownhost;
@@ -3274,13 +3249,8 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
     else
       Log(2, "Error in getnameinfo(): %s (%d)", gai_strerror(status), status);
   }
-  Log (2, "DIAG sess: peernamesem releasing");
   ReleaseSem (&peernamesem);
 
-  Log (2, "DIAG sess: banner in");
-  /* DIAG: sessions complete banner() then die. Mark only the first two
-   * passes of the main loop -- logging every iteration would flood. */
-  diag_pass = 0;
   if (banner (&state, config) == 0) ;
   else if (n_servers > config->max_servers && !to)
   {
@@ -3417,25 +3387,13 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
         else
 #endif
         {
-          if (diag_pass < 2)
-            Log (2, "DIAG loop: pass %i SELECT in (timeout %lus)",
-                 diag_pass, (unsigned long) tv.tv_sec);
           no = SELECT ((socket_in > socket_out ? socket_in : socket_out) + 1, &r, &w, 0, &tv);
-          if (diag_pass < 2)
-            Log (2, "DIAG loop: pass %i SELECT out (rc=%i)", diag_pass, no);
         }
         if (no < 0)
           save_err = TCPERR ();
         Log (8, "selected %i (r=%i, w=%i)", no, FD_ISSET (socket_in, &r), FD_ISSET (socket_out, &w));
       }
-      if (diag_pass < 2)
-        Log (2, "DIAG loop: pass %i bsy_touch in", diag_pass);
       bsy_touch (config);                       /* touch *.bsy's */
-      if (diag_pass < 2)
-      {
-        Log (2, "DIAG loop: pass %i bsy_touch out", diag_pass);
-        ++diag_pass;
-      }
       if (no == 0
 #ifdef BW_LIM
           && !limited
