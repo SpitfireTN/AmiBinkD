@@ -2299,7 +2299,10 @@ static int GET (STATE *state, char *args, int sz, BINKD_CONFIG *config)
         /* touch the file and drop session */
         fclose(state->out.f);
         state->out.f=NULL;
-        touch(state->out.path, time(NULL));
+        /* Datestamp only -- the session is being dropped either way, so
+         * never risk hanging in touch() for it. See readcfg.c. */
+        if (config->set_file_dates)
+          touch(state->out.path, time(NULL));
         rc = 0;
       }
       else if (fseeko (state->out.f, offset, SEEK_SET) == -1)
@@ -2865,7 +2868,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
 
 #ifdef AMIGA
   msg_sendf (state, M_NUL,
-    "VER C-Net/5 AmiBinkd v10.17-" PRTCLNAME "/" PRTCLVER);
+    "VER C-Net/5 AmiBinkd v10.18-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());

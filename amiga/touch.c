@@ -44,10 +44,26 @@ static int amiga_dos_err_to_errno (LONG dosErr)
   }
 }
 
+/* Backstop for the whole port, mirrored from config->set_file_dates by
+ * binkd.c once the config is read. Defaults to 0 so that anything running
+ * before or without a config cannot hang either.
+ *
+ * The per-call-site checks in bsy.c/inbound.c/protocol.c exist to skip the
+ * surrounding work as well, but they can only cover call sites someone
+ * remembered. This one covers all of them, including srif.c's flag-file
+ * touches (unreachable in the Reign of Fire config, which sets no `flag'
+ * or `exec' keywords, but reachable in someone else's) and anything added
+ * later. The hazard is specific to this platform, so the guard belongs on
+ * this platform's implementation. See readcfg.c for the measurements. */
+int amiga_set_file_dates = 0;
+
 int touch (char *file, time_t t)
 {
   struct DateStamp ds;
   time_t rel;
+
+  if (!amiga_set_file_dates)
+    return 0;                    /* datestamp is cosmetic; report success */
 
   if (file == NULL || *file == '\0')
   {

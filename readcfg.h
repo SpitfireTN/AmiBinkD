@@ -135,6 +135,9 @@ struct _BINKD_CONFIG
   int        prescan;
   enum inbcasetype inboundcase;
   int        deletedirs;
+  /* Set datestamps on received files and refresh .bsy/.csy datestamps?
+   * Off by default on AmigaOS -- see set_file_dates in readcfg.c. */
+  int        set_file_dates;
   int        havedefnode;
   enum dontsendemptytype dontsendempty;
   enum renamestyletype   renamestyle;

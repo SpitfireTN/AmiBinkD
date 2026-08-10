@@ -570,10 +570,18 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
       ren_style = RENAME_BODY;
     }
 
-    Log (2, "DIAG inb_done: touch in");
-    if (touch (tmp_name, file->time) != 0)
-      Log (1, "touch %s: %s", tmp_name, strerror (errno));
-    Log (2, "DIAG inb_done: touch out, RENAME in -> %s", real_name);
+    /* Purely cosmetic: stamps the received file with the sender's time
+     * instead of ours. Skipped unless set-file-dates is on, because on
+     * AmigaOS this call can never return -- see readcfg.c. Nothing below
+     * depends on the datestamp. */
+    if (config->set_file_dates)
+    {
+      Log (2, "DIAG inb_done: touch in");
+      if (touch (tmp_name, file->time) != 0)
+        Log (1, "touch %s: %s", tmp_name, strerror (errno));
+      Log (2, "DIAG inb_done: touch out");
+    }
+    Log (2, "DIAG inb_done: RENAME in -> %s", real_name);
 
     while (RENAME (tmp_name, real_name))
     {

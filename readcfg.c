@@ -224,6 +224,38 @@ void lock_config_structure(BINKD_CONFIG *c)
     c->loglevel          = 4;
     c->conlog            = 1;
     c->inboundcase       = INB_SAVE;
+    /* v10.18: AmigaOS defaults this OFF because touch() can block forever.
+     *
+     * touch() is SetFileDate() here (amiga/touch.c). It is documented as a
+     * single bounded dos.library call, and on an idle system it is -- but
+     * when any other Process holds the object it does not return an error,
+     * it never returns at all. AmigaOS gives it no timeout to bound, and
+     * the calling session has no watchdog, so the session is simply gone.
+     *
+     * Measured 2026-08-09 over a 26h run, the inb_done() commit path:
+     *   day   (07:04-21:00): touch in 66 / out 63   fine
+     *   night (21:00-09:06): touch in  7 / out  0   every one hung
+     * The difference was CNet's own file-catalog jobs holding Inbound_Temp.
+     * One such hang inside a poll client never returned, so FTN_Poll never
+     * finished and CNet's event scheduler stayed blocked for 17 hours --
+     * outbound mail dead, tossing stopped -- while inbound sessions piled
+     * up behind the same call until they approached max_servers.
+     *
+     * What it buys is cosmetic: received files carry the sender's
+     * timestamp rather than the time they landed. What it costs is the
+     * mailer. It is a config keyword rather than a #ifdef so a sysop on a
+     * filesystem that does not do this can turn it back on, but nothing in
+     * the protocol depends on it.
+     *
+     * The one non-cosmetic user is bsy_touch(), refreshing .bsy/.csy so a
+     * peer's kill-old-bsy does not sweep a lock out from under a live
+     * session. That needs a session to outlive kill-old-bsy (2h here) to
+     * matter at all, which is far rarer than the hang this avoids. */
+#ifdef AMIGA
+    c->set_file_dates    = 0;
+#else
+    c->set_file_dates    = 1;
+#endif
     c->renamestyle       = RENAME_POSTFIX;
     c->hold_skipped      = 60 * 60;
     c->tzoff             = -1; /* autodetect */
@@ -436,6 +468,7 @@ static KEYWORD keywords[] =
   {"skipmask", read_skip, NULL, 1, 0},
   {"inboundcase", read_inboundcase, &work_config.inboundcase, 0, 0},
   {"deletedirs", read_bool, &work_config.deletedirs, 0, 0},
+  {"set-file-dates", read_bool, &work_config.set_file_dates, 0, 0},
   {"overwrite", read_mask, &work_config.overwrite, 0, 0},
   {"dont-send-empty", read_dontsendempty, &work_config.dontsendempty, 0, 0},
   {"rename-style", read_renamestyle, &work_config.renamestyle, 0, 0},

@@ -3,3 +3,5 @@
 amiga/*.o
 amibinkd
 amiberry-test-stdout.log
+*.d
+amiga/*.d

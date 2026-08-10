@@ -36,6 +36,10 @@
 #endif
 #include <stdio.h>   // FILE
 #include <errno.h>   // EWOULDBLOCK etc.
+#ifdef AMIGA
+/* See amiga/touch.c: platform-wide guard on the datestamp call. */
+extern int amiga_set_file_dates;
+#endif
 #include <fcntl.h>   // O_BINARY, O_NOINHERIT
 #include <sys/types.h> // off_t (at least on EMX)
 

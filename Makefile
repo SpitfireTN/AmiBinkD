@@ -61,14 +61,31 @@ all: amibinkd
 amibinkd: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
+# -MMD -MP emits a .d file per object listing the headers it actually
+# included; the -include below feeds those back as real prerequisites.
+#
+# Without this the rule was a bare `%.o: %.c' -- object files depended on
+# their .c and nothing else, so editing a header rebuilt only translation
+# units whose .c had also changed. That is not merely a stale-build
+# nuisance here: BINKD_CONFIG lives in readcfg.h and is shared by most of
+# the program, so adding a field to the middle of it on 2026-08-09 shifted
+# every later member while ftnq.o, ftnaddr.o, client.o and server.o kept
+# the old offsets. The result was a binary that linked and ran but read
+# config->pDomains from the wrong address -- every domain but the last
+# came back "unknown domain" and six of seven networks silently stopped
+# polling their hub. A full `make clean' was the only thing that fixed it.
+# Header dependencies make that failure mode impossible rather than
+# something the next person has to remember.
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(OBJS:.o=.d)
 
 ###############################################################################
 # Cleanup
 ###############################################################################
 
 clean:
-	rm -f *.o amiga/*.o amibinkd
+	rm -f *.o amiga/*.o *.d amiga/*.d amibinkd
 
 .PHONY: all clean

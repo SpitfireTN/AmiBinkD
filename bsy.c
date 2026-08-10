@@ -257,6 +257,18 @@ void bsy_touch (BINKD_CONFIG *config)
   if (time (0) - last_touch <= BSY_TOUCH_DELAY)
     return;
 
+  /* Nothing to do at all if datestamping is off: every useful thing this
+   * function does is a touch(). Bail before walking the list rather than
+   * spinning the lock for a no-op. See readcfg.c for why AmigaOS defaults
+   * set-file-dates off -- touch() there can block forever, and this
+   * function runs on every pass of every session's protocol main loop,
+   * which made it the single most exposed caller in the program. */
+  if (!config->set_file_dates)
+  {
+    last_touch = time (0);
+    return;
+  }
+
   /* The double-checked lock above was not enough on its own (measured
    * again 2026-08-08: 236 entries to 136 exits, 100 sessions stranded
    * here, while the SELECT() immediately before balanced 236/235). Cutting

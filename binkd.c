@@ -559,6 +559,12 @@ int main (int argc, char *argv[])
     }
     InitLog(current_config->loglevel, current_config->conlog,
             current_config->logpath, current_config->nolog.first);
+#ifdef AMIGA
+    /* Mirror set-file-dates into the platform touch() guard - see
+     * amiga/touch.c. Done here rather than inside readcfg() so it tracks
+     * config reloads too, which come back through this path. */
+    amiga_set_file_dates = current_config->set_file_dates;
+#endif
   }
   else if (verbose_flag)
   {
@@ -595,7 +601,7 @@ int main (int argc, char *argv[])
   else
     Log (4, "BEGIN standalone, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #elif defined(AMIGA)
-  Log (4, "BEGIN, C-Net/5 Amiga Pro AmiBinkd v10.17 " MYNAME "/" MYVER "%s", tmp);
+  Log (4, "BEGIN, C-Net/5 Amiga Pro AmiBinkd v10.18 " MYNAME "/" MYVER "%s", tmp);
 #else
   Log (4, "BEGIN, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #endif
