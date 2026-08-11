@@ -190,6 +190,8 @@ static int do_client(BINKD_CONFIG *config)
           if (q_not_empty(config) == 0)
           {
             Log (4, "the queue is empty, quitting...");
+            Log (4, "");
+            Log (2, "END, C-Net/5 Amiga Pro AmiBinkd v10.18 " MYNAME "/" MYVER);
             return -1;
           }
           unblocksig();
@@ -368,6 +370,10 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
 #endif
 
   ftnaddress_to_str (szDestAddr, &node->fa);
+  /* Blank line between sessions. Stock binkd runs them together, which
+   * is the single biggest thing making a busy poll hard to read. Level 4
+   * so it carries the plain space mark rather than a `+'. */
+  Log (4, "");
   Log (2, "call to %s", szDestAddr);
 #ifndef HAVE_THREADS
   setproctitle ("call to %s", szDestAddr);
