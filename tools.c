@@ -313,8 +313,13 @@ void vLog (int lev, char *s, va_list ap)
     if (lev <= current_conlog && !inetd_flag)
     {
       LockSem(&lsem);
-      fprintf (stderr, "%30.30s\r%c %02d:%02d [%u] %s%s", " ", ch,
-           tm.tm_hour, tm.tm_min, (unsigned) PID (), buf, (lev >= 0) ? "\n" : "");
+      /* Same layout as the file log below. The poll is run from CNet's
+       * FTN menu entry, so this lands on the sysop's screen -- having the
+       * screen and the log read identically is worth the extra columns
+       * the date and task id cost. */
+      fprintf (stderr, "%30.30s\r%c %02d %s %02d:%02d:%02d [%u] %s%s", " ", ch,
+           tm.tm_mday, month[tm.tm_mon], tm.tm_hour, tm.tm_min, tm.tm_sec,
+           (unsigned) PID (), buf, (lev >= 0) ? "\n" : "");
       fflush (stderr);
       ReleaseSem(&lsem);
       if (lev < 0)

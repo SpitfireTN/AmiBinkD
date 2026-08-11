@@ -2854,8 +2854,12 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   msg_send2 (state, M_NUL, "TIME ", szLocalTime);
 
 #ifdef AMIGA
+  /* No BBS name here: this is what every node we poll records about us,
+   * and AmiBinkd is a general AmigaOS mailer -- it is not tied to any one
+   * BBS package. Mailer and protocol only, matching how the remotes
+   * identify themselves ("Mystic/1.12A49 binkp/1.0"). */
   msg_sendf (state, M_NUL,
-    "VER C-Net/5 AmiBinkd v10.18-" PRTCLNAME "/" PRTCLVER);
+    "VER AmiBinkd v10.18-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());
@@ -3215,14 +3219,14 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   setproctitle ("%c [%s]", to ? 'o' : 'i', state.peer_name);
 #endif
   if (strcmp(state.ipaddr, state.peer_name))
-    Log (2, "%s session with %s%s%s [%s]",
-       to ? "outgoing" : "incoming",
+    Log (2, "%s %s%s%s [%s]",
+       to ? "Outgoing:" : "Incoming:",
        state.peer_name,
        current_port ? ":" : "", current_port ? current_port : "",
        state.ipaddr);
   else
-    Log (2, "%s session with %s%s%s",
-       to ? "outgoing" : "incoming",
+    Log (2, "%s %s%s%s",
+       to ? "Outgoing:" : "Incoming:",
        state.peer_name,
        current_port ? ":" : "", current_port ? current_port : "");
 

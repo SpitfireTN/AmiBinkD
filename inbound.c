@@ -624,9 +624,11 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
     time_t cps_elapsed = (safe_time() == file->start) ?
                           1 : (safe_time() - file->start);
     long cps_x100 = (long) ((file->size * 100) / cps_elapsed);
-    Log (2, "rcvd: %s (%" PRIuMAX ", %ld.%02ld CPS, %s)", file->netname,
+    /* No trailing address: the session header already named the peer,
+     * and repeating it here cost 20 columns on every received packet. */
+    Log (2, "rcvd: %s (%" PRIuMAX ", %ld.%02ld CPS)", file->netname,
          (uintmax_t) file->size,
-         cps_x100 / 100, cps_x100 % 100, szAddr);
+         cps_x100 / 100, cps_x100 % 100);
   }
   return 1;
 }
