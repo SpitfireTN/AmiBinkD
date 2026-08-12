@@ -31,21 +31,27 @@ none — anyone cloning would reasonably assume it was current — so the
 v10.0-era one was removed rather than left to rot. Build from source with
 the toolchain below, or get the packaged release from the BBS.
 
-### Superseded releases — do not deploy
+### The version jump: v10.16 and v10.17 were never released
 
-- **v10.16** — first release where inbound genuinely ran, but a hung session
+**Nothing shipped between v10.15 and v10.18.** Both intermediate versions
+exist as builds and commits in this tree, and both are documented here and
+in `manual.txt`, because the AmigaOS problems they uncovered are worth
+passing on to anyone else porting to this platform. Neither is safe to run:
+
+- **v10.16** — first build where inbound genuinely ran, but a hung session
   permanently leaked an AmigaOS Process, a socket and a bsdsocket.library
   instance. 107 of 128 sessions leaked in twelve hours; the leaked `.bsy`
   locks then made the BBS's own poll script abort before it launched the
   mailer, killing outbound mail for eleven hours with `error: 8` as the only
-  symptom.
+  symptom. In practice that was worse than v10.15's quieter failure, which
+  is why the brief upgrade recommendation for it was withdrawn.
 - **v10.17** — fixed the semaphore strand behind most of that (105 leaks →
   13), but sessions could still hang one at a time inside `touch()`. One such
   hang inside a poll client blocked CNet's event scheduler for 17 hours.
-- **v10.15 and earlier** — inbound has been silently broken since v10.5, but
-  fails safe: the server stops accepting after the first hang, so nothing
-  accumulates and outbound keeps working. This was the recommended release
-  during the v10.16/v10.17 window; it no longer is.
+- **v10.15** — the previous public release, and inbound has been silently
+  broken in it since v10.5. It fails safe: the server stops accepting after
+  the first hang, so nothing accumulates and outbound keeps working. Upgrade
+  from it to v10.18.
 
 Separately, and worth doing whatever mailer you run: if your BBS event script
 deletes `.bsy`/`.csy` files before polling, make sure a failed delete cannot
