@@ -6,35 +6,46 @@ ixnet.library.
 
 ---
 
-## ⚠ Do not deploy v10.16 — use v10.15
+## Current release: v10.18 — recommended
 
-**v10.16 is not fit for production and its upgrade advice is withdrawn.**
-The inbound fix it describes below is real and the diagnosis is sound, but
-the release is incomplete: on a system that actually receives inbound
-connections it is **worse than v10.15**.
+**v10.18 is the release to run.** Inbound and outbound both work, and the
+session-hang arc that made v10.16 and v10.17 unsafe is closed. Verified over
+a 19h37m unattended soak on the live BBS: 22 poll cycles (22 BEGIN /
+22 END), 29/29 scheduled events finished, 66 sessions all `OK`, 82 packets
+received, both queues drained, **zero errors and zero warnings**.
 
-What happens: inbound sessions now start running (they never did before),
-but a session can still hang, and every hung session permanently leaks an
-AmigaOS Process, a socket and a bsdsocket.library instance. On the author's
-own system 107 of 128 sessions leaked in twelve hours. Those leaked sessions
-hold `.bsy` lock files, which in turn made the BBS's own poll script abort
-before it ever launched the mailer — outbound mail stopped for eleven hours
-and the only visible symptom was `error: 8` in the event log.
+If you are on an earlier build, upgrade — with one config change:
 
-v10.15 has broken inbound too (it always did, silently, since v10.5), but it
-fails safe: the server stops accepting after the first hang, so nothing
-accumulates and outbound keeps working.
+    set-file-dates      leave OFF (the default on this port)
 
-**If you carry FTN mail with this port, stay on v10.15 until a fixed release
-is published.**
+That keyword is new in v10.18 and is what closes the last hang. See
+"The session-hang arc" below for why, and `manual.txt` section 06 for the
+full keyword reference.
 
-Work in progress, not yet released: unique socket-transfer ids (Amiberry's
-`ReleaseSocket(fd, UNIQUE_ID)` returns the same id every call), a guard on
-`ftello()` returning -1 (which was being sent as a resume offset of
-18446744073709551615, the actual cause of the hang), and detection of a
-partial belonging to another live session. With those, a full night ran with
-inbound working and no outbound failures — but one leak path remains open
-and one unexplained restart is unaccounted for, so it is not shipped.
+**There is no release archive in this repo, deliberately.** The `.lha` is
+built on the Amiga side with `DH0:C/lha`, because the host tools available
+here (lhasa, 7z) can only *read* LZH and not create it, and because
+building it there preserves the AmigaOS protection bits and `.info` icon an
+Aminet package carries. A stale archive named as the release is worse than
+none — anyone cloning would reasonably assume it was current — so the
+v10.0-era one was removed rather than left to rot. Build from source with
+the toolchain below, or get the packaged release from the BBS.
+
+### Superseded releases — do not deploy
+
+- **v10.16** — first release where inbound genuinely ran, but a hung session
+  permanently leaked an AmigaOS Process, a socket and a bsdsocket.library
+  instance. 107 of 128 sessions leaked in twelve hours; the leaked `.bsy`
+  locks then made the BBS's own poll script abort before it launched the
+  mailer, killing outbound mail for eleven hours with `error: 8` as the only
+  symptom.
+- **v10.17** — fixed the semaphore strand behind most of that (105 leaks →
+  13), but sessions could still hang one at a time inside `touch()`. One such
+  hang inside a poll client blocked CNet's event scheduler for 17 hours.
+- **v10.15 and earlier** — inbound has been silently broken since v10.5, but
+  fails safe: the server stops accepting after the first hang, so nothing
+  accumulates and outbound keeps working. This was the recommended release
+  during the v10.16/v10.17 window; it no longer is.
 
 Separately, and worth doing whatever mailer you run: if your BBS event script
 deletes `.bsy`/`.csy` files before polling, make sure a failed delete cannot
@@ -45,7 +56,7 @@ locks for you.
 
 ---
 
-## Status: inbound confirmed working only in the unreleased WIP build; v10.15 is the recommended release
+## Status: inbound and outbound both confirmed working in production (v10.18)
 
 Cross-compiles and links cleanly into a loadable AmigaOS binary
 (`amibinkd`), zero references to ixemul/ixnet anywhere in the binary.
@@ -62,11 +73,12 @@ real FTN addresses/domains):
   runs the full session (or a clean auth failure for a wrong per-node
   password - a config issue, not a bug), and correctly returns to
   waiting for the next connection afterward - the original hang this
-  port fought hardest to fix. **This only genuinely worked as of
-  v10.16**: through v10.15 every inbound session silently transmitted
-  nothing and hung, taking the listener with it. See the dedicated
-  section below - it is the single most important thing to understand
-  before touching the AmigaOS socket glue.
+  port fought hardest to fix. **This first ran at all in v10.16 and only
+  became safe in v10.18**: through v10.15 every inbound session silently
+  transmitted nothing and hung, taking the listener with it; in v10.16 and
+  v10.17 sessions ran but leaked. Two dedicated sections below cover this -
+  they are the single most important thing to understand before touching
+  the AmigaOS socket glue or anything that touches a file the mailer holds.
 - **Multi-node polling in one invocation** (`-P addr1 -P addr2 ...`, or
   `-P ALL` for every node in the config as of v10.15 - see below), and
   the equivalent pattern of polling each network via its own `Execute
@@ -74,18 +86,20 @@ real FTN addresses/domains):
   working through all seven configured networks in one run, including
   **real inbound file reception and successful CNet/5 Toss import** of
   the received packets - not just clean-looking session logs.
-- **Unattended soak test**: the fixed build (deployed 2026-07-19 23:32)
-  ran unattended overnight, 30-minute polls across all seven networks,
-  through 2026-07-20 morning with no gaps, no hangs, and no repeats of
-  any of the bugs fixed this round - see "Soak test results" below.
+- **Unattended soak tests**: several, each one gating a release. The
+  latest (v10.18, 2026-08-10 → 08-11, 19h37m) ran 22 poll cycles and 66
+  sessions with zero errors and zero warnings - see "Soak test results"
+  below for that run and the earlier ones it supersedes.
 
 Getting here took several rounds of real-hardware-only bugs - Amiberry's
 `bsdsocket_emu` diverges from real Roadshow/real BSD sockets in more than
 one place, this toolchain's `intmax_t`/`uintmax_t` size assumptions don't
-match `sys.h`'s fallback format-string macros, and one bug (`o_rename()`)
-was entirely our own - and none of these were visible from
-cross-compiling alone. See "Real-hardware findings" below before touching
-networking, logging, or filesystem code here.
+match `sys.h`'s fallback format-string macros, AmigaOS's own
+`SetFileDate()`/`utime()`/`unlink()` block forever rather than failing when
+another Process holds the object, and two bugs (`o_rename()`, and a
+Makefile with no header dependencies) were entirely our own - and none of
+these were visible from cross-compiling alone. See "Real-hardware findings"
+below before touching networking, logging, or filesystem code here.
 
 ## Background
 
@@ -249,6 +263,35 @@ make
   a POSIX failure and vice versa) and never set `errno` on the real
   failure path. See finding #8 below - this one was entirely our own bug,
   not an Amiberry divergence.
+- **`amiga/touch.c`, `amiga/delete.c`** (new files, same pattern as
+  `rename.c` above): native `dos.library` replacements for libc calls that
+  **block indefinitely on this port instead of failing**. `utime()` and
+  `unlink()` each cost a live production stall before being replaced -
+  `unlink()` was caught 2026-08-02 hanging an outbound poll for 40+ minutes
+  immediately after `found old .csy file`, with none of `sdelete()`'s own
+  bounded-retry error messages ever appearing, which is what proved the
+  task was stuck *inside* `unlink()` rather than looping around it.
+  `DeleteFile()` and `SetFileDate()` are single bounded calls that return a
+  real error for a locked file, which is exactly what the existing retry
+  logic was written to handle. The rule this port now follows: on AmigaOS,
+  prefer a bounded `dos.library` call that returns an error over any libc
+  wrapper that might wait on a lock. (`SetFileDate()` turned out to block
+  too - see "The session-hang arc" below.)
+- **`amiga/getfree.c`** (new file): `getfree()` via `Lock()` + `Info()`,
+  AmigaDOS's native free-space query, rather than the `statfs`/`statvfs`
+  variants upstream selects between - none of which this toolchain has.
+- **`amiga/msleep.c`** (new file): sub-second sleep, because `tools.c`'s
+  `Log()` retries opening the log file ten times **with no delay between
+  attempts**. Ten `fopen()` calls take microseconds, so a competing task
+  holding the file for a few milliseconds makes all ten fail and the
+  message is discarded silently. Not cosmetic: on 2026-08-02 a dropped line
+  made a session look like it hung inside `touch()` when it had not, and
+  sent the investigation after a bug that was not there. Sysops lose log
+  lines the same way.
+- **`Makefile`**: `-MMD -MP` plus `-include $(OBJS:.o=.d)`, so headers are
+  real prerequisites. Added in v10.18 after their absence produced a
+  cleanly-linking binary that read `config->pDomains` from the wrong
+  address - see the second half of "The session-hang arc".
 - **Compiler/libc quirks specific to this toolchain** (none ixemul-related,
   just this specific bebbo build's rough edges):
   - `sys.h` needs `-DHAVE_STDARG_H` or it falls back to pre-ANSI
@@ -538,6 +581,127 @@ base across Processes via `SBTC_CAN_SHARE_LIBRARY_BASES` makes calls
 signal delivery — which includes `WaitSelect()`, not merely blocking
 `connect()`.
 
+## The session-hang arc: v10.16 → v10.18
+
+Making inbound *run* (v10.16, above) exposed what happens when a session
+that runs can also hang. Two releases and two distinct bugs later it is
+closed. Both bugs are the same shape, and it is the shape that matters more
+than either instance: **a call that blocks forever instead of failing, made
+while holding something other sessions need.**
+
+### v10.17 — one blocked session stranded all the others
+
+Inbound went dead daily. `n_servers` ratcheted upward until it crossed
+`max_servers` (default 100) and every incoming session was refused with
+`too many servers`. Outbound kept working throughout — separate process per
+cycle — which is exactly what masked it.
+
+Counting step markers across a 13-hour run pinned it:
+
+    handoff: child base=      213    inbound children started
+    handoff: child closing    108    -> 105 stranded
+    pass 0 SELECT   in/out  236/235    select is fine
+    pass 0 bsy_touch in/out 236/136    <- 100 stranded here
+
+`bsy_touch()` held a single global semaphore across `touch()` and `Log()`
+for every entry in `bsy_list`. One session blocking in that I/O pins the
+semaphore, and every sibling then blocks forever in `ObtainSemaphore()` on
+the next pass of its protocol main loop. It is self-amplifying: stranded
+sessions keep their `.bsy` entries, so the list grows, so the lock is held
+longer, so more sessions strand.
+
+Two changes, either of which alone breaks the chain:
+
+- **`TryLockSem()`** — non-blocking acquire via `AttemptSemaphore()`
+  (`amiga/sem.c`, `sem.h`). `bsy_touch()` now skips its pass rather than
+  ever blocking on the lock. Touching `.bsy` files is cosmetic upkeep and
+  `BSY_TOUCH_DELAY` already tolerates being early or late.
+- **No I/O under the lock.** `bsy_touch()` claims the pass, copies each
+  `fa`/`bt` out under a brief lock, releases, then touches unlocked. Safe
+  because cells are never freed (`bsy_get_free_cell()` reuses `FA_ZERO`'d
+  ones) and `bsy_add()` only prepends, so it cannot splice into the part of
+  the list still ahead of the walk.
+
+Worth recording as a dead end: an earlier double-checked lock did not help.
+Cutting the *number* of acquisitions does nothing about a lock *held across
+blocking I/O*.
+
+### v10.18 — the call that could never return
+
+v10.17 measured 105 leaks → 13. Better, not fixed: a session could still
+hang alone inside `touch()` itself. Counting markers across a 26-hour run
+split the behaviour cleanly by time of day:
+
+    inb_done() commit path
+    day   (07:04-21:00): touch in 66 / out 63    fine
+    night (21:00-09:06): touch in  7 / out  0    every one hung
+
+The difference was the BBS's own overnight file-catalog jobs holding
+`Inbound_Temp`. `touch()` is `SetFileDate()` on this port — written
+precisely because the generic `utime()` blocked — but **it blocks too when
+another Process holds the object.** It does not fail, it never returns,
+AmigaOS gives it no timeout, and the session has no watchdog.
+
+The cost was never just leaked sessions. One such hang inside a poll client
+meant the driver script never finished, so CNet's event scheduler stayed
+blocked for 17 hours: outbound mail dead, tossing stopped, packets piling
+up in `Inbound/`, inbound sessions accumulating toward `max_servers`.
+
+Fix: new config keyword **`set-file-dates`**, default **off on AmigaOS** and
+on everywhere else so upstream behaviour is unchanged. Gated at
+`bsy_touch()` (`bsy.c`), `inb_done()` (`inbound.c`) and the GET-violation
+path (`protocol.c`), plus a backstop inside `amiga/touch.c` itself so
+`srif.c` — and anything added later — is covered without anyone having to
+remember. What it gives up is cosmetic: received files carry arrival time
+rather than the sender's timestamp.
+
+Measured live over 18h, spanning the overnight window that broke v10.17:
+
+                              v10.16     v10.17      v10.18
+    saturated                 13h        ~4 days     no
+    children start/close      213/108    46/33       89/89
+    n_servers peak            100 cap    14 -> 56    5
+    inb_done touch in/out     66/63*     7/0*        351/0
+    scheduler events                     hung 17h    59/59 finished
+
+    * day/night split above; v10.18 never calls touch() at all.
+
+### The build bug that fix introduced — read this before editing a header
+
+More dangerous than the hang, and worth its own warning: adding
+`set_file_dates` to the **middle** of `BINKD_CONFIG` shifted every later
+member. The Makefile rule was a bare `%.o: %.c`, so editing `readcfg.h`
+rebuilt only translation units whose `.c` had also changed — `ftnq.o`,
+`ftnaddr.o`, `client.o` and `server.o` kept the old offsets.
+
+The binary linked. It ran. It read `config->pDomains` from the wrong
+address: every domain but the last came back `unknown domain`, and six of
+seven networks silently stopped polling their hub. Nothing crashed; it just
+quietly stopped calling out.
+
+The struct change was legal — the *build* was not. Fixed with `-MMD -MP`
+and `-include` of the generated `.d` files. Verified: `ftnq.o` now depends
+on `readcfg.h`, and `unknown domain` went 36 → 0 after a clean rebuild.
+**If you are working from an older checkout of this tree, `make clean`
+before trusting a build.**
+
+### Diagnostics
+
+Every count above came from step markers through `banner()`, the protocol
+main loop and `inbound.c`'s commit path. They are not in the shipped build
+(about 800 KB of log per day), but they are preserved whole and
+re-appliable:
+
+    git apply    diag-instrumentation.patch     # re-add
+    git apply -R diag-instrumentation.patch     # remove
+
+Two cautions if you use them. **Read the counts filtered by timestamp,
+never by line position** — the log has two writers with independent
+offsets, and position-based analysis produced a confident false negative.
+And if you have `nolog` masks in your config, comment out `handoff:*` and
+`clientmgr*` first: masked, these greps return zero, which reads as "no
+sessions" rather than "not logged".
+
 ## `-P ALL`: one config, one invocation, every network (v10.15)
 
 Upstream binkd's `-P` takes one FTN address per switch, so this BBS drove
@@ -553,8 +717,8 @@ every uplink, one command that polls all of them.
 v10.15 adds the same thing here, so `AmiBinkd -p -PALL AmiBinkd:AmiBinkd.cfg`
 polls every network in one run (`rofftn.scr`). `AmiBinkd.cfg` already
 listed all seven domains/addresses/nodes because the **server** side
-(`ChkAmiBinkDSvr` -> `AmiBinkd -s AmiBinkd.cfg`) has always used the
-merged config; this makes the client side use the same one file.
+(`AmiBinkd -s AmiBinkd.cfg`) has always used the merged config; this makes
+the client side use the same one file.
 
 Implementation (`poll_all_nodes()` in `ftnnode.c`, dispatched from
 `binkd.c`'s poll-creation loop when the `-P` argument is `ALL`,
@@ -586,6 +750,50 @@ otherwise idle a full minute between each pair of polls. The per-network
 `.cfg`/`.scr` files are untouched and still work if a single network ever
 needs to be polled by itself.
 
+## Making the log readable (v10.18)
+
+A sysop could not tell where one session ended and the next began, and the
+useful lines were buried. Three things fixed that, and only the first is
+code:
+
+1. **Five lines in `client.c`** — a blank line before each outbound session
+   and before the final `END`, plus an explicit `END` marker. Stock binkd
+   runs sessions together with nothing between them and finishes on `the
+   queue is empty, quitting...`. The separation is the single biggest
+   readability win and there is no way to get it from config.
+2. **`loglevel` and `nolog`**, which binkd already ships — config, not
+   code. `loglevel 4` is the useful setting: **level 3 is what emits the
+   remote's identity block** (`SYS`/`ZYZ`/`LOC`/`NDL`/`VER`/`TIME`), so at
+   level 2 sessions look anonymous. See `amibinkd-example.cfg` for a
+   commented mask set.
+3. **Five message strings shortened** for 80-column width, measured against
+   a real poll: `BEGIN` 120 → 68 columns, `rcvd:` 89 → 71, `Polling` (was
+   `creating a poll for`) 82 → 70, `Outgoing:`/`Incoming:` (was
+   `outgoing/incoming session with`), `END` 84 → 66. Over-80 lines per poll
+   went from 9 to 4.
+
+That third item is a **deliberate divergence from stock binkd**, made for
+line width and portability. If an upstream merge ever conflicts on wording,
+this is why. An earlier attempt that renamed messages purely to match a
+reference log was reverted — it diverged from every other binkd log in FTN
+and broke anything that parses them, all for cosmetics obtainable from
+config. Do not re-introduce message renames for looks.
+
+**Two `nolog` traps that cost real time:**
+
+- **One mask per WORD.** `nolog receiving *` adds `receiving` **and** `*`,
+  and `*` matches every message — the log goes completely silent while the
+  mailer runs normally. Masks must be single tokens; `*` spans spaces on
+  its own, so `*->*Inbound*` still matches `x.pkt -> Inbound/x.pkt`.
+- **Masks hide your own diagnostics.** `handoff:*` and `clientmgr*` cover
+  the counters that found the whole v10.16-v10.18 leak. Comment them out
+  before diagnosing a stall.
+
+The mailer no longer identifies itself as part of any one BBS package. It
+reports `VER AmiBinkd v10.18-binkp/1.1`, the same shape remotes use
+(`Mystic/1.12A49 binkp/1.0`). Branding lives in the distribution's text
+files only.
+
 ## Not done yet
 
 - No zlib/bzip2 compression (`WITH_ZLIB`/`WITH_BZLIB2` not defined -
@@ -593,14 +801,10 @@ needs to be polled by itself.
 - No DNS SRV-record lookups (see `srv_gai.c` note above).
 - `run3()`'s piped external-transport feature is stubbed (logs and
   returns failure) - not a core binkp/FTN feature, only one caller.
-- Multi-day/production-scale soak testing - the single overnight run
-  documented below (pre-v10.5, synchronous path) has since been followed
-  by two more, covering the concurrency path itself: an overnight soak
-  right after finding #10's real fix landed (14/14 clean cycles/network,
-  zero failures), and a two-day, two-reboot soak validating the same fix
-  also covers `gethostbyname()` (~60 clean cycles/network total, one
-  non-reproducing blip on the first reboot only). Still not weeks of
-  real production volume, but no longer just one night either.
+- Multi-week production-scale soak testing. Every release since v10.5 has
+  been gated on an unattended overnight run (see "Soak test results"
+  below), and v10.18 has now held clean across a full night with zero
+  errors - but that is nights, not weeks, and on one system.
 - `errno`'s exposure at every `TCPERR()`/`TCPERRNO` call site besides the
   `getpeername()`/`getsockname()` critical section fixed for real
   concurrent load (`client.c`'s outbound connect/socket/bind, `server.c`'s
@@ -612,21 +816,11 @@ needs to be polled by itself.
   configs as a precaution, even though finding #10's fix likely also
   covers it (same call class, same spawned-child pattern) - just hasn't
   actually been re-tested live the way outbound `gethostbyname()` was.
-- The `.csy`/`.bsy` busy-flag file routinely fails to unlink
-  (`error unlinking '...csy': Text file busy`) - the overnight soak
-  test confirms this fires on essentially *every* session, one
-  network-specific file per network (e.g. `39.902.0.0.csy` for
-  amiganet, `64.500.0.0.csy` for cnet), not an intermittent glitch.
-  Purely cosmetic: every affected session still logged `done (...,
-  OK, ...)` right after. Still not root-caused - worth a look if it
-  ever *does* coincide with a real failure, but not urgent.
-- Same soak test also logged a handful (3 total, ArakNet x1, C=Net x2)
-  of `error unlinking '...Inbound_Temp/*.dt': No such file or
-  directory` immediately after a successful `done OK` session close -
-  a session-cleanup step trying to remove a temp marker that was
-  already gone. Harmless (the session it followed had already
-  completed successfully both before and after), rare, not
-  investigated further.
+- `conlog` is the one element of v10.18 not proven. It was disabled here on
+  2026-08-01 on suspicion of freezing CNet's Control window when the poll
+  runs under `Execute`, and re-enabled for the v10.18 soak, which was clean
+  - but 19 hours is not proof. If your BBS front-end freezes during or
+  after a poll, comment out `conlog` before investigating anything else.
 - Per-node password mismatches surfaced during testing are a config
   issue (`AmiBinkd.cfg`'s `node` lines vs. what the hub expects), not
   a code bug - worth double-checking all configured nodes, not
@@ -636,28 +830,52 @@ needs to be polled by itself.
   pre-existing malformed mail rather than anything in this port, but
   worth a look if it recurs on fresh packets.
 
-## Soak test results (2026-07-19 evening -> 2026-07-20 morning)
+## Soak test results
 
-Fixed build deployed to `DH0:AmiBinkd/AmiBinkd` 2026-07-19 23:32, then
-left running unattended overnight under the normal `FTN_Poll` /
-30-minute-interval driver-script schedule across all seven networks.
-Reviewed `DH3:CNet/SysData/log/*.log` the next morning:
+**v10.18 — 2026-08-10 → 2026-08-11, 19h37m.** The release soak, run
+unattended under the normal 30-minute `FTN_Poll` schedule across all seven
+networks:
 
-- All seven per-network logs current through ~05:30-05:40 the next
-  morning, 30-minute cadence, no gaps and no hangs.
-- Every occurrence of the `o_rename()` `cannot rename ... No error!` bug
-  (7 total, across ArakNet/FidoNet/PiNet/RetroNet) timestamps to
-  *before* 23:32 - i.e. the pre-fix build. Zero recurrences since the
-  fixed binary went live.
-- Every occurrence of `disciple.scr`'s old `-P12:136/0` typo similarly
-  predates 23:32; every disciple poll since used the corrected
-  `-P12:316/0` and completed `done (..., OK, ...)`.
-- Disk usage flat and unremarkable (22% used, 171G free) - no leaked
-  temp files piling up.
-- The two still-open cosmetic issues above (`.csy`/`.bsy` unlink and
-  the rare `.dt` unlink) are the only things that showed up; neither
-  ever blocked a session from completing.
+- 22 poll cycles: **22 `BEGIN` / 22 `END`**, no unmatched starts.
+- **29/29** scheduled events finished.
+- **66 sessions, all `OK`**; 82 packets received; both queues drained.
+- **Zero errors, zero warnings.**
+- Zero `find_tmp_name: ... busy`, and zero orphaned partials left in
+  `Inbound_Temp` (see `kill-old-partial-files` below).
 
-Net result: every bug fixed this round held overnight under real
-unattended production traffic. The only open item is the pre-existing,
-purely cosmetic `.csy`/`.bsy` unlink issue.
+Two long-standing cosmetic items from earlier releases are gone as of this
+run and are no longer listed as open: the `.csy`/`.bsy` `error unlinking
+'...': Text file busy` that used to fire on essentially every session, and
+the rare `error unlinking '...Inbound_Temp/*.dt': No such file or
+directory`. Both were addressed by the ETXTBSY retry and by `amiga/delete.c`
+replacing `unlink()` with a bounded `DeleteFile()`.
+
+One config change came out of this soak and is in the shipped example:
+**`kill-old-partial-files 2h`**. Thirteen orphaned `.dt`/`.hr` pairs had
+accumulated in `Inbound_Temp`, and every session logged `find_tmp_name: ...
+Text file busy` scanning past them. Two hours is long enough for an
+interrupted transfer to be resumed on the next poll; the 2013 Amiga port
+used 30 seconds, which is aggressive enough to destroy a still-resumable
+partial.
+
+**Earlier soaks**, each gating its release: an overnight run after finding
+#10's fix (14/14 clean cycles per network); a two-day, two-reboot run
+confirming that fix also covers `gethostbyname()` (~60 clean cycles per
+network, one non-reproducing blip on the first reboot); a 14.5h run for
+v10.17 (0 `too many servers`, against v10.16 saturating in 13h); an 18h run
+for v10.18 spanning the overnight window that broke v10.17 (89/89 children
+start/close, 59/59 scheduler events). The original 2026-07-19 run predates
+the concurrency path entirely and is superseded by all of the above.
+
+## Credits
+
+binkd is by Dima Maloff and its many contributors; this is a port of
+upstream `binkd/1.1a-115`, not a rewrite. `COPYING` and `HISTORY` are
+upstream's and unmodified.
+
+**Rudi Timmermans (X-TReMe BBS)** wrote the earlier Amiga port, AmiBinkd
+v5.00-v9.02 (2012-2013), built against ixemul.library. This port starts
+from clean upstream rather than from his tree, but it carries his name for
+the obvious reason — he did this first, on harder ground, and the log
+format his v9.01 produced is close enough to this one that the two are
+recognisably the same program a decade apart.
