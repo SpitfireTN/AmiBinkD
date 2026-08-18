@@ -176,6 +176,36 @@ extern int amiga_set_file_dates;
   #define UNLINK(p) unlink(p)
 #endif
 
+#ifdef AMIGA
+  /* libnix keeps every open file on one global list and compiles its own
+   * stdio locking out, but v10.5+ runs concurrent sessions as Processes
+   * sharing a single address space -- so two of them opening or closing
+   * files at once corrupt that list, and a recycled FILE hands one session
+   * another's buffer. That is what put log text into a filename and, on
+   * 2026-08-12, a log line into a DOS "insert volume" requester. Full
+   * write-up in amiga/stdio.c.
+   *
+   * Redirected by macro rather than by an UNLINK()-style spelling on
+   * purpose: a single unserialized open or close anywhere in the program
+   * is enough to corrupt the list, so this must not rely on every call
+   * site remembering to opt in. <stdio.h> is included above, so the real
+   * declarations are already in scope. */
+  extern void amiga_stdio_init (void);
+  extern FILE *amiga_fopen (const char *path, const char *mode);
+  extern FILE *amiga_fdopen (int fd, const char *mode);
+  extern int   amiga_fclose (FILE *f);
+  /* v10.24: libnix13's fstat() always reports st_size == 0 (it measures
+   * with SEEK_CUR straight after seeking to the start).  That made binkd
+   * treat every outbound file as empty, so every mail bundle this system
+   * sent went out at 0 bytes.  See amiga/fstat.c for the disassembly and
+   * the live evidence. */
+  extern int amiga_fstat (int fd, struct stat *sb);
+  #define fstat(d,b)  amiga_fstat(d,b)
+  #define fopen(p,m)  amiga_fopen(p,m)
+  #define fdopen(d,m) amiga_fdopen(d,m)
+  #define fclose(f)   amiga_fclose(f)
+#endif
+
 #ifdef VISUALCPP
   #define sleep(a) Sleep((a)*1000)
   #define pipe(h)  _pipe(h, 0, 64)

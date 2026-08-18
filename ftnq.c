@@ -474,14 +474,40 @@ static void process_bsy (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
 
     ftnaddress_to_str (buf, fa);
     Log (2, "found old %s file for %s", s, buf);
-    if (sdelete (path) == 0)
+
+    /* v10.20: ONE non-blocking attempt. Deliberately not sdelete(), which
+     * retries five times with sleep(1) between -- up to 4 seconds of blocking
+     * per stale lock.
+     *
+     * This function runs from q_scan_addrs(), which complete_login() calls in
+     * the middle of a live binkp session (protocol.c:1569, immediately before
+     * the "pwd protected session" log line). So every second spent sleeping
+     * here is a second the session sits with an unread socket, and because a
+     * poll runs its nodes one at a time, it stalls the entire poll cycle.
+     * Measured 2026-08-13/14: three polls stalled at exactly this point --
+     * 40 min, 10.5 min, and one that never returned and needed an Amiberry
+     * restart. That last one looked like a network hang (CLOSE-WAIT socket,
+     * 28 bytes unread for 34 minutes) but the task was never in the network
+     * code at all; it was in here.
+     *
+     * The retry loop cannot help anyway: a .bsy that will not unlink is held
+     * by a live sibling session or by a cached host fd on the emulator side,
+     * and neither clears within four seconds. The give-up/backoff below plus
+     * the regular outbound rescan already provide the retry, without holding
+     * a session hostage while they do it. */
+    if (UNLINK (path) == 0)
     {
+      Log (6, "unlinked `%s'", path);
       if (node != NULL)
         node->bsy_fail_count = 0;
     }
-    else if (node != NULL)
+    else
     {
-      if (++node->bsy_fail_count >= BSY_GIVEUP_TRIES)
+      /* Level 4, not 1: contention with a live session is expected and is not
+       * an error. The "giving up" line below stays loud -- that one means a
+       * lock is genuinely wedged and the node is being held off. */
+      Log (4, "cannot remove stale %s for %s: %s", s, buf, strerror (errno));
+      if (node != NULL && ++node->bsy_fail_count >= BSY_GIVEUP_TRIES)
       {
         Log (1, "giving up removing stale %s for %s after %d tries, holding %ds",
              s, buf, node->bsy_fail_count, BSY_GIVEUP_HOLD);

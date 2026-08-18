@@ -61,6 +61,13 @@ struct _BW
 typedef struct _STATE STATE;
 struct _STATE
 {
+#ifdef DIAG_HS
+  /* v10.21 diag5 handshake-breadcrumb budget.  Lives in STATE, not in a
+   * static, for the same reason DIAG_SPIN/DIAG_SEL use locals: session
+   * Processes share one address space on this port, so a static would let
+   * concurrent sessions drain each other's budget. */
+  int diag_hs_left;
+#endif
   SOCKET s_in, s_out;
   struct _BINKD_CONFIG *config;
   FTN_NODE *to;			/* Dest. address (if an outbound connection) */

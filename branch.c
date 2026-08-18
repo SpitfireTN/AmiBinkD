@@ -222,6 +222,13 @@ again:
           NP_StackSize, (ULONG) STACKSIZE,
           NP_Priority, (LONG) (me->tc_Node.ln_Pri - 1),
           NP_Name, (ULONG) "AmiBinkD session",
+          /* Session children do the actual file I/O, so they are the ones
+           * most likely to hand DOS a bad path. -1 = never put up a
+           * requester, return the error to the caller instead. Set here
+           * explicitly rather than relying on inheriting the parent's
+           * pr_WindowPtr (binkd.c main); a child that blocks on a
+           * requester strands the whole poll. */
+          NP_WindowPtr, (ULONG) -1,
           TAG_DONE);
 
       if (newproc == NULL)

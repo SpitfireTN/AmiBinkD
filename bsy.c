@@ -62,6 +62,30 @@ static BSY_ADDR *bsy_get_free_cell (void)
   return lst;
 }
 
+
+#ifdef DIAG_BSY
+/*
+ * TEMPORARY (2026-08-15) -- pinpoints where a stalled session dies, then goes.
+ *
+ * A poll froze for 2h38m on 2026-08-15 with its last log line being the M_ADR
+ * handler's address list. The socket sat CLOSE-WAIT with 5,550 bytes unread for
+ * 49 minutes, and DIAG_SPIN never fired -- so the protocol main loop was not
+ * running at all and the task was blocked inside address processing, which is
+ * exactly where bsy_add() runs once per remote AKA.
+ *
+ * Two candidates inside bsy_add(), and these markers tell them apart:
+ *   want-lock -> (silence)  = blocked on the GLOBAL bsy semaphore, i.e. some
+ *                             sibling Process is holding it across file I/O.
+ *                             Same shape as the bsy_touch() ratchet.
+ *   creating  -> (silence)  = blocked in create_sem_file()'s open(), i.e. a
+ *                             single object the emulator will not let go.
+ * Whichever line is last names the failure.
+ */
+#define DIAG_BSY_LOG(...) Log (4, __VA_ARGS__)
+#else
+#define DIAG_BSY_LOG(...) do { } while (0)
+#endif
+
 int bsy_add (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 {
   char buf[MAXPATHLEN + 1];
@@ -69,13 +93,17 @@ int bsy_add (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 
   ftnaddress_to_filename (buf, fa0, config);
 
+  DIAG_BSY_LOG ("DIAG-BSY: add want-lock %s `%s'", bt == F_CSY ? "csy" : "bsy", buf);
   LockSem (&sem);
+  DIAG_BSY_LOG ("DIAG-BSY: add got-lock");
   if (*buf)
   {
     strnzcat (buf, bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
+    DIAG_BSY_LOG ("DIAG-BSY: add mkpath `%s'", buf);
     if (mkpath (buf) == -1)
       Log (1, "mkpath('%s'): %s", buf, strerror (errno));
 
+    DIAG_BSY_LOG ("DIAG-BSY: add creating `%s'", buf);
     if (create_sem_file (buf, 5))
     {
       BSY_ADDR *new_bsy = bsy_get_free_cell ();
@@ -121,6 +149,7 @@ int bsy_add (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
       ok = 1;
     }
   }
+  DIAG_BSY_LOG ("DIAG-BSY: add done, releasing lock");
   ReleaseSem (&sem);
   return ok;
 }
@@ -146,6 +175,60 @@ int bsy_test (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
   return 0;
 }
 
+/*
+ * v10.20: remove one of OUR OWN lock files, without the 4-second stall.
+ *
+ * bsy_remove() runs at session end (protocol.c:290) once per remote AKA, and
+ * sdelete() retries five times with sleep(1) between -- up to 4 seconds per
+ * lock. Measured on 2026-08-13: a session logged "done" at :04, then unlink
+ * errors at :09 and :15, then "session closed" at :15. Eleven seconds of pure
+ * sleeping after the transfer had already finished, on every session.
+ *
+ * We cannot just drop the retry the way process_bsy() did. That one deletes
+ * a foreign, already-stale lock; this one deletes ours, and a leftover .bsy
+ * marks the node busy -- q_next_node() (ftnq.c) skips busy nodes -- until
+ * kill-old-bsy ages it out, which is 2h in this configuration. Trading 11
+ * seconds of delay for a 2-hour polling outage on that node would be a bad
+ * bargain.
+ *
+ * So keep the retry and cut the granularity instead. Precedent: the log file
+ * had the same problem and the same shape of fix (see amiga/msleep.c) -- ten
+ * back-to-back retries all failed because a task holding the object for even
+ * a few ms defeated them, while a few tens of milliseconds of delay was
+ * enough. 10 tries x 40ms is 400ms worst case instead of 4s, with more
+ * attempts than before rather than fewer.
+ */
+#define BSY_UNLINK_TRIES 10
+
+static int bsy_unlink (char *path)
+{
+  int rc = -1;
+#ifdef AMIGA
+  int i;
+
+  for (i = 0; i < BSY_UNLINK_TRIES; i++)
+  {
+    if (i)
+      LOG_RETRY_DELAY ();               /* amiga_msleep(40) */
+    if ((rc = UNLINK (path)) == 0)
+    {
+      Log (6, "unlinked `%s'", path);
+      return 0;
+    }
+    if (!(errno == EPERM || errno == EACCES || errno == EAGAIN || errno == ETXTBSY))
+      break;
+  }
+  /* Kept at level 1: this is not cosmetic. The lock survives, so the node
+   * reads as busy until kill-old-bsy expires it. Message deliberately differs
+   * from sdelete()'s "error unlinking" so the two paths stay tellable apart
+   * in the log. */
+  Log (1, "could not remove own lock `%s': %s", path, strerror (errno));
+#else
+  rc = sdelete (path);
+#endif
+  return rc;
+}
+
 void bsy_remove (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 {
   char buf[MAXPATHLEN + 1], *p;
@@ -156,7 +239,9 @@ void bsy_remove (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
   {
     strnzcat (buf, bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
 
+    DIAG_BSY_LOG ("DIAG-BSY: remove want-lock `%s'", buf);
     LockSem (&sem);
+    DIAG_BSY_LOG ("DIAG-BSY: remove got-lock");
     for (bsy = bsy_list; bsy; bsy = bsy->next)
     {
       if (!ftnaddress_cmp (&bsy->fa, fa0) && bsy->bt == bt)
@@ -166,7 +251,7 @@ void bsy_remove (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 	  if (close(bsy->h))
             Log (2, "Can't close %s (handle %d): %s!", buf, bsy->h, strerror(errno));
 #endif
-	sdelete (buf);
+	bsy_unlink (buf);
 	/* remove empty point directory */
 	if (config->deletedirs)
 	{
@@ -212,7 +297,7 @@ void bsy_remove_all (BINKD_CONFIG *config)
         if (close(bsy->h))
           Log (2, "Can't close %s (handle %d): %s!", buf, bsy->h, strerror(errno));
 #endif
-      sdelete (buf);
+      bsy_unlink (buf);
       /* remove empty point directory */
       if (config->deletedirs && bsy->fa.p != 0 && (p = last_slash(buf)) != NULL)
       {

@@ -182,6 +182,26 @@ __stdargs char *inet_ntoa(struct in_addr in)
     return (char *)Inet_NtoA(in.s_addr);
 }
 
+/* v10.23: tell the CURRENT SocketBase where to write errno.
+ *
+ * Must be called once per SocketBase, by the Task that will use it -- the
+ * setting lives in the library base, not globally. Called from
+ * amiga_socket_init() for the shared base and from
+ * amiga_open_private_socketbase() for each per-child private base.
+ *
+ * Without this, errno is never updated by socket calls and every TCPERR()
+ * on this port reports a stale value from some earlier, unrelated
+ * operation. See the fuller note in amiga_socket_init(). */
+void amiga_set_errno_ptr(void)
+{
+    struct TagItem errTags[2];
+
+    errTags[0].ti_Tag  = SBTM_SETVAL(SBTC_ERRNOPTR(sizeof(errno)));
+    errTags[0].ti_Data = (ULONG) &errno;
+    errTags[1].ti_Tag  = TAG_DONE;
+    SocketBaseTagList(errTags);
+}
+
 int amiga_socket_init(void)
 {
     struct TagItem shareTags[2];
@@ -221,6 +241,28 @@ int amiga_socket_init(void)
     shareTags[0].ti_Data = TRUE;
     shareTags[1].ti_Tag  = TAG_DONE;
     SocketBaseTagList(shareTags);
+
+    /* v10.23: point this SocketBase at our errno.
+     *
+     * bsdsocket.library does not touch a program's errno unless handed a
+     * pointer to it. AmiBinkD never did this, yet iphdr.h defines
+     * TCPERR()/TCPERRNO on AMIGA as strerror(errno)/errno - so every socket
+     * error binkd reported was whatever unrelated call last set errno.
+     *
+     * That is not cosmetic. It produced the long-standing "recv: Permission
+     * denied" lines, which are EACCES left over from a failed unlink() of a
+     * .bsy lock (271 of those on 2026-08-17 alone) - the socket never had a
+     * permission error at all. Worse, recv_block()/send_block() branch on
+     * TCPERRNO == EWOULDBLOCK/EAGAIN to decide whether an error is
+     * retryable, so a stale value could make a fatal error look retryable
+     * or vice versa.
+     *
+     * Note the comment above: opting into SBTC_CAN_SHARE_LIBRARY_BASES
+     * already made error reporting per-SocketBase rather than per-Process.
+     * That makes setting this MORE important, not less - and it must be set
+     * on every base, which is why amiga_open_private_socketbase() below
+     * does the same for each private child base. */
+    amiga_set_errno_ptr();
 
     return 0;
 }
@@ -271,7 +313,15 @@ struct Library *amiga_open_private_socketbase(void)
 {
     struct Library *priv = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
     if (priv != NULL)
+    {
         FindTask(NULL)->tc_UserData = (APTR) priv;
+        /* v10.23: the errno pointer is a per-SocketBase setting, so a fresh
+         * private base starts out not reporting errno at all. Set it here,
+         * AFTER tc_UserData is assigned, so amiga_current_socketbase() -- and
+         * therefore the SocketBaseTagList() call inside -- resolves to this
+         * new private base rather than the shared one. */
+        amiga_set_errno_ptr();
+    }
     return priv;
 }
 

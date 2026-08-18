@@ -21,6 +21,7 @@
 #include <sys/wait.h>
 #endif
 #ifdef AMIGA
+#include <dos/dosextens.h>
 #include <proto/exec.h>
 #endif
 
@@ -473,6 +474,37 @@ int main (int argc, char *argv[])
   configpath = parseargs(argc, saved_argv);
 #else
 #ifdef AMIGA
+  /* Must come before any file is opened and before branch.c can spawn the
+   * first session Process -- it arms the lock that keeps concurrent
+   * sessions from corrupting the C runtime's global open-file list. See
+   * amiga/stdio.c. */
+  amiga_stdio_init ();
+
+  /* Nothing here may ever pop a DOS requester. This runs as a background
+   * task under CNet's event scheduler with no user at the screen, so
+   * "Please insert volume X in any drive" waits forever -- the same
+   * indefinite block as the touch()/unlink() hangs, just reached through
+   * dos.library's error handler instead of a filesystem call.
+   *
+   * Seen live 2026-08-12 22:xx: a requester for volume `? 12 Aug 17'.
+   * That is not a volume -- it is one of our own log lines,
+   *
+   *     ? 12 Aug 17:30:41 [1092491064] error unlinking `...': Permission denied
+   *
+   * handed to a DOS call as a path. AmigaDOS takes everything before the
+   * first colon as a device name, which splits it exactly there. The
+   * stale pointer behind that is a separate bug; this line is what stops
+   * it (and any future one like it) from freezing the mail system --
+   * pr_WindowPtr = -1 makes DOS return the error to the caller instead
+   * of asking a human who isn't there.
+   *
+   * The 5:30p poll that hit it never returned, so CNet's event scheduler
+   * sat on it for five hours and nothing tossed.
+   *
+   * Children get this via NP_WindowPtr in branch.c -- it is not inherited
+   * from us reliably enough to depend on. */
+  ((struct Process *) FindTask (NULL))->pr_WindowPtr = (APTR) -1;
+
   /* No fork(), no real "pid" concept - mypid is just a stable per-run
    * identifier for logging (PID() macro / md5b.c's challenge nonce),
    * not used for any real process management here. */
@@ -605,7 +637,7 @@ int main (int argc, char *argv[])
    * ("-p -r -PALL AmiBinkd:AmiBinkd.cfg"), pushing this to 120 columns --
    * the only line in a poll that wrapped twice on an 80-column screen.
    * The arguments are in the config and the script, not worth the width. */
-  Log (4, "BEGIN, AmiBinkd v10.18 " MYNAME "/" MYVER);
+  Log (4, "BEGIN, AmiBinkd v10.24+diag6 " MYNAME "/" MYVER);
 #else
   Log (4, "BEGIN, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #endif

@@ -18,6 +18,10 @@ extern struct Library *amiga_current_socketbase (void);
 
 int amiga_socket_init(void);
 void amiga_socket_cleanup(void);
+/* v10.23: point the CURRENT SocketBase at our errno. Per-SocketBase
+ * setting, so it must be called for the shared base and for every
+ * private per-child base. Without it, TCPERR() reports stale values. */
+void amiga_set_errno_ptr(void);
 struct Library *amiga_open_private_socketbase(void);
 void amiga_close_private_socketbase(struct Library *lib);
 

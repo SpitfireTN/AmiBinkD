@@ -13,7 +13,12 @@ CC        = $(TOOLCHAIN)/m68k-amigaos-gcc
 
 DEFINES = -DAMIGA -DHAVE_STDARG_H -DHAVE_SNPRINTF -DHAVE_VSNPRINTF -DHAVE_INTMAX_T -DHAVE_SOCKLEN_T \
           -DHAVE_UNISTD_H -DHAVE_SYS_TIME_H -DHAVE_SYS_PARAM_H -DHAVE_SYS_IOCTL_H \
-          -DOS="\"Amiga\"" -DHTTPS -DAMIGADOS_4D_OUTBOUND
+          -DOS="\"Amiga\"" -DHTTPS -DAMIGADOS_4D_OUTBOUND \
+          -DDIAG_OUTPATH -DDIAG_SPIN -DDIAG_BSY -DDIAG_SEL -DDIAG_HS -DDIAG_TD
+
+# -DDIAG_OUTPATH is a TEMPORARY diagnostic (added 2026-08-13) that names which
+# writer put log text into state->out.path. Delete this define and the
+# DIAG_OUTPATH block in protocol.c once the free/use pair is identified.
 
 # -msoft-float: force pure software floating point everywhere, never emit
 # real 68881/68882-style hardware FPU (F-line) instructions. Without this,
@@ -38,7 +43,8 @@ SRCS =  binkd.c tools.c ftnaddr.c ftndom.c ftnnode.c ftnq.c \
         readcfg.c readflo.c prothlp.c iptools.c rfc2553.c run.c binlog.c \
         exitproc.c getw.c xalloc.c setpttl.c https.c md5b.c crypt.c \
         compress.c srif.c pmatch.c getopt.c \
-        amiga_glue.c amiga/rename.c amiga/getfree.c amiga/sem.c amiga/touch.c amiga/delete.c amiga/msleep.c
+        amiga_glue.c amiga/rename.c amiga/getfree.c amiga/sem.c amiga/touch.c amiga/delete.c amiga/msleep.c \
+        amiga/stdio.c amiga/fstat.c
 # srv_gai.c deliberately excluded - its srv_getaddrinfo() is only for
 # platforms with a real resolver (HAVE_RESOLV_H/WITH_FTS5004), which
 # AmigaOS has neither of. srv_gai.h's own macro fallback

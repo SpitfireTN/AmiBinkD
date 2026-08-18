@@ -60,6 +60,110 @@ enum { ipNoCheck=0, ipResolved=1, ipStrict=2, ipRelaxed, ipNoUnknown, ipNoError 
 static char *scommand[] = {"NUL", "ADR", "PWD", "FILE", "OK", "EOB",
                            "GOT", "ERR", "BSY", "GET", "SKIP"};
 
+#ifdef DIAG_OUTPATH
+/*
+ * TEMPORARY DIAGNOSTIC -- added 2026-08-13, delete once the bug is found.
+ *
+ * Something writes a line of our own log text into state->out.path, which then
+ * reaches start_file_transfer() as a filename. Twice confirmed:
+ *
+ *   v10.14 2026-07-30  start_file_transfer:   30 Jul 05:32:51 [1094578264] BEGIN, ...
+ *   v10.19 2026-08-13  start_file_transfer: - 13 Aug 06:06:44 [1082988256] QSIZE 0 files 0 bytes
+ *
+ * Static reading narrowed it to a heap use-after-free but could not identify
+ * the free/use pair: STATE is memset by init_protocol(), STACKSIZE is 256 KB so
+ * it is not stack, and the sent_fls dangling FILE* (current_file_was_sent) is
+ * overwritten by fopen() before it is ever dereferenced. Only two writers of
+ * out.path remain -- read_flo_line() via state->flo.f, and the strcpy from an
+ * FTNQ node -- and they are only distinguishable at runtime.
+ *
+ * So: check the buffer immediately after each write and name the writer. The
+ * next occurrence arrives labelled instead of anonymous. The check runs once
+ * per file on a path that is about to do real file I/O, so the cost is noise.
+ */
+static int looks_like_log_text (const char *p)
+{
+  int i;
+
+  if (p == NULL)
+    return 1;
+
+  for (i = 0; p[i] != '\0' && i < MAXPATHLEN; ++i)
+  {
+    /* No path this build handles contains a control character. */
+    if ((unsigned char) p[i] < 0x20)
+      return 1;
+    /* vLog() stamps every line with the task id as "[12345]". */
+    if (p[i] == '[' && p[i + 1] >= '0' && p[i + 1] <= '9')
+      return 1;
+  }
+
+  /* vLog()'s line prefix: "<mark> DD Mon HH:MM:SS", mark from "!?+-" or space. */
+  if (i > 10 && strchr ("!?+- ", p[0]) != NULL && p[1] == ' ' &&
+      isdigit ((unsigned char) p[2]) && isdigit ((unsigned char) p[3]) &&
+      p[4] == ' ' && isalpha ((unsigned char) p[5]))
+    return 1;
+
+  return 0;
+}
+
+static void diag_out_path (STATE *state, const char *src, const void *ctx)
+{
+  char *q;
+
+  if (!looks_like_log_text (state->out.path))
+    return;
+
+  q = strquote (state->out.path, SQ_CNTRL);
+  Log (1, "DIAG: out.path corrupted, writer=%s content=`%s'",
+       src, q ? q : "(strquote failed)");
+  Log (1, "DIAG:   ctx=%p flo.f=%p flo.path=`%s' out.flo=`%s' n_sent_fls=%d sent_fls=%p q=%p",
+       ctx, (void *) state->flo.f, state->flo.path, state->out.flo,
+       state->n_sent_fls, (void *) state->sent_fls, (void *) state->q);
+  if (q)
+    free (q);
+}
+#define DIAG_OUT_PATH(s,src,ctx) diag_out_path ((s), (src), (const void *) (ctx))
+#else
+#define DIAG_OUT_PATH(s,src,ctx) do { } while (0)
+#endif
+
+#ifdef DIAG_HS
+/* v10.21 "diag5": breadcrumbs through the connect -> handshake window.
+ *
+ * The 2026-08-16 14:00 poll hung for 67 minutes between client.c's
+ * "connected" and protocol.c's "pwd protected session".  It had completed
+ * the full outbound scan and two of three sessions; the third connected at
+ * TCP level and then stopped, never writing END, and the two following
+ * scheduled polls never ran.  DIAG_SEL was silent, so it was NOT inside
+ * SELECT(); DIAG_SPIN was silent, so it was not spinning.  On AMIGA the
+ * only SELECT() compiled in is the DIAG_SEL-wrapped one (the other sits
+ * under #ifdef WIN32), so select really is excluded.
+ *
+ * That leaves init_protocol(), banner(), and the raw send()/recv() calls -
+ * all of which currently log only at level 7/9, i.e. invisible at the
+ * deployed loglevel 3.  So this logs each step at level 2 instead.  A hang
+ * produces no further output, so the LAST breadcrumb names the blocking
+ * call directly rather than by elimination.
+ *
+ * Self-limiting: HS_RESET() re-arms a fixed budget per protocol() entry, so
+ * an established long session cannot flood the log the way a raw level-7
+ * build would.  Remove the whole -DDIAG_HS flag once the call is named.
+ *
+ * The budget lives in STATE (see protoco2.h), not in a static: session
+ * Processes share one address space here, so a static would let concurrent
+ * sessions drain each other's count.
+ */
+#define HS_RESET() (state->diag_hs_left = 150)
+#define HS(fmt, ...) do { if (state->diag_hs_left > 0) \
+                          { --state->diag_hs_left; \
+                            Log (2, "DIAG-HS: " fmt, ##__VA_ARGS__); } \
+                        } while (0)
+#else
+#define HS_RESET() do { } while (0)
+#define HS(fmt, ...) do { } while (0)
+#endif
+
 /*
  * Fills <<state>> with initial values, allocates buffers, etc.
  */
@@ -69,6 +173,9 @@ static int init_protocol (STATE *state, SOCKET socket_in, SOCKET socket_out, FTN
   socklen_t lval;
 
   memset (state, 0, sizeof (STATE));
+  /* after the memset, which would otherwise zero the budget we just set */
+  HS_RESET ();
+  HS ("init_protocol: entry");
 
   state->major = 1;
   state->minor = 0;
@@ -144,6 +251,7 @@ static int init_protocol (STATE *state, SOCKET socket_in, SOCKET socket_out, FTN
   {
     Log (6, "binkp init done, socket # is %i", state->s_in);
   }
+  HS ("init_protocol: done");
   return 1;
 }
 
@@ -335,11 +443,14 @@ static int send_block (STATE *state, BINKD_CONFIG *config)
   if (state->optr && state->oleft)
   {
     Log (7, "sending %i byte(s)", state->oleft);
+    HS ("send_block: about to %s %i byte(s)",
+        state->pipe ? "write()" : "send()", state->oleft);
     if (state->pipe)
       /* TODO: this call should be non-blocking on WIN32 */
       n = write (state->s_out, state->optr, state->oleft);
     else
       n = send (state->s_out, state->optr, state->oleft, MSG_NOSIGNAL);
+    HS ("send_block: %s returned %i", state->pipe ? "write()" : "send()", n);
 #ifdef BW_LIM
     state->bw_send.bytes += n;
 #endif
@@ -1571,6 +1682,13 @@ static int complete_login (STATE *state, BINKD_CONFIG *config)
   if (OK_SEND_FILES (state, config))
     state->q = q_sort (state->q, state->fa, state->nfa, config);
   state->msgs_in_batch = 0;               /* Forget about login msgs */
+  /* Handshake is over: this is the far side of the window the 2026-08-16
+   * stall died inside, so stop spending breadcrumbs on the established
+   * session. */
+  HS ("handshake complete, breadcrumbs off");
+#ifdef DIAG_HS
+  state->diag_hs_left = 0;
+#endif
   if (state->state == P_SECURE)
     Log (2, "pwd protected session (%s)",
          (state->MD_flag == 1) ? "MD5" : "plain text");
@@ -2251,10 +2369,14 @@ static int GET (STATE *state, char *args, int sz, BINKD_CONFIG *config)
           memcpy (&tfile_buf, &state->out, sizeof (TFILE));
           memcpy (&state->out, state->sent_fls + i, sizeof (TFILE));
           memcpy (state->sent_fls + i, &tfile_buf, sizeof (TFILE));
+          DIAG_OUT_PATH (state, "sent_fls[i] (swap)", state->sent_fls + i);
         }
         else
         {
           memcpy (&state->out, state->sent_fls + i, sizeof (TFILE));
+          /* Checked before remove_from_sent_files_queue(), which may free the
+           * array out from under the ctx pointer. */
+          DIAG_OUT_PATH (state, "sent_fls[i]", state->sent_fls + i);
           remove_from_sent_files_queue (state, i);
         }
         if ((state->out.f = fopen (state->out.path, "rb")) == 0)
@@ -2584,10 +2706,13 @@ static int recv_block (STATE *state, BINKD_CONFIG *config)
     no = 0;
   else
   {
+    HS ("recv_block: about to %s up to %i byte(s)",
+        state->pipe ? "read()" : "recv()", (int) (sz - state->iread));
     if (state->pipe)
       no = read (state->s_in, state->ibuf + state->iread, sz - state->iread);
     else
       no = recv (state->s_in, state->ibuf + state->iread, sz - state->iread, 0);
+    HS ("recv_block: %s returned %i", state->pipe ? "read()" : "recv()", no);
     Log (9, "Read %i bytes", no);
     if (no == -1)
     {
@@ -2817,6 +2942,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
   char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
+  HS ("banner: entry (queueing initial M_NUL block)");
   if (!no_MD5 && !state->to &&
       (state->MD_challenge = MD_getChallenge(NULL, state)) != NULL)
   {  /* Answering side MUST send CRAM message as a very first M_NUL */
@@ -2859,7 +2985,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
    * BBS package. Mailer and protocol only, matching how the remotes
    * identify themselves ("Mystic/1.12A49 binkp/1.0"). */
   msg_sendf (state, M_NUL,
-    "VER AmiBinkd v10.18-" PRTCLNAME "/" PRTCLVER);
+    "VER AmiBinkd v10.19-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());
@@ -2892,6 +3018,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
     msg_send2(state, M_NUL, "OPT", szOpt);
     xfree(szOpt);
   }
+  HS ("banner: done");
   return 1;
 }
 
@@ -2959,6 +3086,7 @@ static int start_file_transfer (STATE *state, FTNQ *file, BINKD_CONFIG *config)
         TF_ZERO (&state->flo);
         return 0;
       }
+      DIAG_OUT_PATH (state, "read_flo_line", state->flo.f);
 
       if ((w = trans_flo_line (state->out.path, config->rf_rules.first)) != 0)
         Log (5, "%s mapped to %s", state->out.path, w);
@@ -2996,6 +3124,7 @@ static int start_file_transfer (STATE *state, FTNQ *file, BINKD_CONFIG *config)
   if (action == -1)
   {
     strcpy (state->out.path, file->path);
+    DIAG_OUT_PATH (state, "queue node (FTNQ)", file);
     state->out.flo[0] = 0;
     state->out.action = file->action;
     state->out.type = file->type;
@@ -3103,6 +3232,17 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   struct timeval tv;
   fd_set r, w;
   int no, rd;
+#ifdef DIAG_SPIN
+  /* See the DIAG_SPIN block in the main loop. Locals, not statics -- session
+   * Processes share one address space on this port. */
+  unsigned long diag_sig = (unsigned long) -1, diag_idle = 0;
+  time_t diag_idle_since = 0, diag_last_report = 0;
+#endif
+#ifdef DIAG_SEL
+  /* Locals for the same reason. See the DIAG_SEL block around SELECT(). */
+  time_t diag_sel_t0 = 0;
+  long diag_sel_tv = 0;
+#endif
 #ifdef WIN32
   unsigned long t_out = 0;
   unsigned long u_nettimeout = config->nettimeout*1000000l;
@@ -3391,7 +3531,39 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
         else
 #endif
         {
+#ifdef DIAG_SEL
+          /* TEMPORARY (2026-08-16) -- one question, then it comes out.
+           *
+           * Sessions freeze for 1-3h between the M_ADR handler finishing and
+           * the remote's M_OK, with the socket holding thousands of unread
+           * bytes. Three facts point here and nowhere else: `timeout!' has
+           * NEVER been logged although nettimeout is 300s; DIAG_SPIN (which
+           * sits a few lines below this call) never fires, so the loop is not
+           * iterating; and DIAG_BSY proved bsy_add() completes normally, so
+           * the address loop had already finished.
+           *
+           * That leaves the SELECT() below not returning. On AmigaOS this is
+           * WaitSelect() via bsdsocket.library (amiga_glue.c), and if it
+           * ignores or loses its timeout the session can neither time out nor
+           * make progress -- which is exactly what the logs show, and would
+           * also explain why the poll and the resident server froze and
+           * released in the same second despite being separate processes.
+           *
+           * Logs only when the call overruns, so it is silent in normal
+           * operation: a healthy SELECT here returns within nettimeout. */
+          diag_sel_t0 = safe_time ();
+          diag_sel_tv = (long) tv.tv_sec;
+#endif
           no = SELECT ((socket_in > socket_out ? socket_in : socket_out) + 1, &r, &w, 0, &tv);
+#ifdef DIAG_SEL
+          if (safe_time () - diag_sel_t0 > 60)
+            Log (1, "DIAG-SEL: SELECT returned %d after %lds but tv.tv_sec was %ld "
+                    "(nettimeout %d) - r=%d w=%d",
+                 no, (long) (safe_time () - diag_sel_t0), diag_sel_tv,
+                 config->nettimeout,
+                 FD_ISSET (socket_in, &r) ? 1 : 0,
+                 FD_ISSET (socket_out, &w) ? 1 : 0);
+#endif
         }
         if (no < 0)
           save_err = TCPERR ();
@@ -3421,6 +3593,69 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
         }
         break;
       }
+
+#ifdef DIAG_SPIN
+      /* TEMPORARY (2026-08-15) -- settles one question and then comes out.
+       *
+       * Sessions with 1:154/10@fidonet stall for 1-2 hours after the M_ADR
+       * handler completes, waiting on the remote's M_OK, then finish every
+       * remaining step within a single second -- so the data was buffered and
+       * we simply were not reading it. `timeout!' has NEVER been logged in the
+       * entire log, although nettimeout is 300s and the check is four lines
+       * above this one. A two-hour wait should have tripped it ~24 times.
+       *
+       * Only two shapes fit: either this loop keeps running with select()
+       * returning >0 and nothing progressing (a spin), or the task is not in
+       * this loop at all (blocked somewhere else entirely).
+       *
+       * This tells the two apart without inference. If it is a spin, the
+       * counter climbs and we get the loop state; if the task is blocked
+       * outside the loop, NOTHING is logged during the stall -- and that
+       * silence is itself the answer. Throttled to one line a minute so a
+       * fast spin cannot flood the log.
+       *
+       * Counters are locals of protocol(), NOT statics: session Processes
+       * share one address space here, so a static would be shared by every
+       * concurrent session and the numbers would be meaningless. */
+      {
+        unsigned long sig = (unsigned long) state.iread
+                          + (unsigned long) state.oleft
+                          + (unsigned long) state.n_msgs
+                          + (unsigned long) state.msgs_in_batch
+                          + (unsigned long) state.bytes_rcvd
+                          + (unsigned long) state.bytes_sent;
+        time_t dnow = safe_time ();
+
+        if (sig != diag_sig)
+        {                                  /* something moved: reset */
+          diag_sig = sig;
+          diag_idle = 0;
+          diag_idle_since = dnow;
+        }
+        else
+        {
+          ++diag_idle;
+          if (diag_idle_since == 0)
+            diag_idle_since = dnow;
+          if (dnow - diag_idle_since >= 60 && dnow - diag_last_report >= 60)
+          {
+            unsigned long secs = (unsigned long) (dnow - diag_idle_since);
+
+            diag_last_report = dnow;
+            Log (1, "DIAG-SPIN: no progress %lus, %lu passes (%lu/s), select=%d "
+                    "isize=%d iread=%d oleft=%d nmsgs=%d state=%d/%d "
+                    "EOB l/r=%d/%d wGOT=%d nsent=%d in.f=%d out.f=%d",
+                 secs, diag_idle, diag_idle / (secs ? secs : 1), no,
+                 state.isize, state.iread, state.oleft, state.n_msgs,
+                 state.state, state.state_ext,
+                 state.local_EOB, state.remote_EOB,
+                 state.waiting_for_GOT, state.n_sent_fls,
+                 state.in.f ? 1 : 0, state.out.f ? 1 : 0);
+          }
+        }
+      }
+#endif
+
       rd = FD_ISSET (socket_in, &r);
       if (rd)       /* Have something to read */
       {

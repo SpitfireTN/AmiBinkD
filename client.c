@@ -191,7 +191,7 @@ static int do_client(BINKD_CONFIG *config)
           {
             Log (4, "the queue is empty, quitting...");
             Log (4, "");
-            Log (2, "END, AmiBinkd v10.18 " MYNAME "/" MYVER);
+            Log (2, "END, AmiBinkd v10.24+diag6 " MYNAME "/" MYVER);
             return -1;
           }
           unblocksig();
@@ -316,6 +316,43 @@ void clientmgr (void *arg)
 #endif
   exit (0);
 }
+
+#ifdef DIAG_TD
+/* v10.22 "diag6": breadcrumbs through SESSION TEARDOWN.
+ *
+ * diag5 settled where the hang is NOT.  Over a full day it recorded
+ * 1442 recv() calls issued and 1442 returned, 129 send() issued and 129
+ * returned -- not one socket call ever failed to return.  DIAG_SEL and
+ * DIAG_SPIN stayed silent the entire time too.  So select(), spin loops,
+ * bsy_add(), send() and recv() are all eliminated.
+ *
+ * What diag5 DID show is that sessions complete their handshake normally
+ * and die afterwards.  The 2026-08-17 05:00 hang stopped dead here:
+ *
+ *     05:00:24  could not remove own lock `...12.316.0.0.bsy': Permission denied
+ *     05:00:24  session closed, quitting...
+ *               <nothing, ever -- no END, 7 stale locks left behind>
+ *
+ * "session closed, quitting..." is the LAST statement in protocol():
+ * deinit_protocol() has already run by then.  A healthy poll then removes
+ * the .csy call lock and writes END.  This one never even logged
+ * bsy_remove()'s first line, so it died in the handful of calls between
+ * those two points:
+ *
+ *     protocol() returns -> del_socket() -> soclose() -> bsy_remove(F_CSY)
+ *                        -> amiga_close_private_socketbase()
+ *
+ * All of those are the AmigaOS no-timeout blocking class (same family as
+ * the SetFileDate()/touch() problem fixed in v10.18), and none of them is
+ * instrumented.  A hang produces no further output, so the last breadcrumb
+ * names the blocking call.
+ *
+ * Volume is a few lines per session -- no budget needed, unlike DIAG_HS.
+ */
+#define TD(fmt, ...) Log (2, "DIAG-TD: " fmt, ##__VA_ARGS__)
+#else
+#define TD(fmt, ...) do { } while (0)
+#endif
 
 static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
 {
@@ -693,9 +730,12 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
     return 0;
 
   protocol (sockfd, sock_out, node, NULL, host, port, dst_ip, config);
+  TD ("call0: protocol() returned, starting teardown");
   if (pid != -1)
   {
+    TD ("call0: del_socket(sock_out=%i)", (int) sock_out);
     del_socket(sock_out);
+    TD ("call0: close(sock_out)");
     close(sock_out);
 #ifdef HAVE_WAITPID
     if (waitpid (pid, &rc, 0) == -1)
@@ -714,8 +754,11 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
   }
   else
   {
+    TD ("call0: del_socket(sockfd=%i)", (int) sockfd);
     del_socket(sockfd);
+    TD ("call0: about to soclose(sockfd=%i)   <-- PRIME SUSPECT", (int) sockfd);
     soclose (sockfd);
+    TD ("call0: soclose() returned");
   }
   return 1;
 }
@@ -754,7 +797,9 @@ static void call (void *arg)
   if (bsy_add (&a->node->fa, F_CSY, a->config))
   {
     call0 (a->node, a->config);
+    TD ("call: call0() returned, about to bsy_remove(F_CSY)");
     bsy_remove (&a->node->fa, F_CSY, a->config);
+    TD ("call: bsy_remove(F_CSY) returned");
   }
   else
   {
@@ -765,7 +810,9 @@ static void call (void *arg)
   perl_done_clone(cperl);
 #endif
 #ifdef AMIGA
+  TD ("call: about to amiga_close_private_socketbase()");
   amiga_close_private_socketbase (privSocketBase);
+  TD ("call: private SocketBase closed - session fully torn down");
 #endif
   unlock_config_structure(a->config, 0);
   free (arg);
