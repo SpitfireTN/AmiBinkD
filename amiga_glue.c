@@ -337,3 +337,10 @@ void amiga_close_private_socketbase(struct Library *lib)
         FindTask(NULL)->tc_UserData = NULL;
     }
 }
+
+/* v10.26: the calling Task's address, used as the per-session log id.
+ * See sys.h's PID() definition for why a cached global was wrong here. */
+int amiga_task_id (void)
+{
+    return (int)(long) FindTask (NULL);
+}

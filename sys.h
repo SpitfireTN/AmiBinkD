@@ -104,6 +104,28 @@ extern int amiga_set_file_dates;
   #define PID()    ((int)getpid())
   void dos_sleep(int);
   #define sleep(s) dos_sleep(s)
+#elif defined(AMIGA)
+  /* v10.26: give every session its OWN id in the log.
+   *
+   * mypid is a global, set once in main() to FindTask(NULL). Upstream binkd
+   * is fine with that: it is one process, and PID()/gettid() naturally differs
+   * per thread. This port is not -- branch.c spawns each session as a separate
+   * AmigaOS Process that SHARES one address space, so every session read the
+   * same global and logged the same id:
+   *
+   *   - incoming from 192.168.86.1 (55650)   [1081768832]
+   *   - incoming from 192.168.86.1 (55666)   [1081768832]
+   *   - incoming from 192.168.86.1 (55668)   [1081768832]
+   *
+   * Three concurrent inbound sessions, indistinguishable, their handshakes
+   * interleaved into what reads as triplicated lines. Evaluating the task
+   * address at CALL time gives each Process its own value, which is what the
+   * [id] field is for and what binkd's thread ids achieve elsewhere.
+   *
+   * amiga_task_id() lives in amiga_glue.c so this header need not pull in
+   * proto/exec.h -- sys.h is included almost everywhere. */
+  int amiga_task_id (void);
+  #define PID() amiga_task_id()
 #else
   extern int mypid;
   #define PID() mypid
@@ -171,6 +193,11 @@ extern int amiga_set_file_dates;
    * error, which is what sdelete()'s retry loop expects. See
    * amiga/delete.c. */
   extern int o_unlink (const char *path);
+  /* v10.27: raw AmigaDOS error from the last o_unlink() failure. EACCES is
+   * ambiguous -- ERROR_OBJECT_IN_USE (218) and ERROR_DELETE_PROTECTED (222)
+   * both map to it, and they need opposite fixes. */
+  extern long amiga_last_dos_err (void);
+  #define UNLINK_DOSERR() amiga_last_dos_err()
   #define UNLINK(p) o_unlink(p)
 #else
   #define UNLINK(p) unlink(p)

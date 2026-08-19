@@ -191,7 +191,7 @@ static int do_client(BINKD_CONFIG *config)
           {
             Log (4, "the queue is empty, quitting...");
             Log (4, "");
-            Log (2, "END, AmiBinkd v10.25 " MYNAME "/" MYVER);
+            Log (2, "END, AmiBinkd v10.27 " MYNAME "/" MYVER);
             return -1;
           }
           unblocksig();
