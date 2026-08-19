@@ -8,3 +8,4 @@ amiga/*.d
 
 # Session backups (.PRE_<tag>) -- local undo copies, not history
 *.PRE_*
+.session-backups/

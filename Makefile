@@ -13,8 +13,7 @@ CC        = $(TOOLCHAIN)/m68k-amigaos-gcc
 
 DEFINES = -DAMIGA -DHAVE_STDARG_H -DHAVE_SNPRINTF -DHAVE_VSNPRINTF -DHAVE_INTMAX_T -DHAVE_SOCKLEN_T \
           -DHAVE_UNISTD_H -DHAVE_SYS_TIME_H -DHAVE_SYS_PARAM_H -DHAVE_SYS_IOCTL_H \
-          -DOS="\"Amiga\"" -DHTTPS -DAMIGADOS_4D_OUTBOUND \
-
+          -DOS="\"Amiga\"" -DHTTPS -DAMIGADOS_4D_OUTBOUND
 
 # -DDIAG_OUTPATH is a TEMPORARY diagnostic (added 2026-08-13) that names which
 # writer put log text into state->out.path. Delete this define and the
