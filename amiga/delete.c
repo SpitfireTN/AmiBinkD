@@ -27,6 +27,25 @@
 #include <proto/dos.h>
 #include <errno.h>
 
+/* v10.27: keep the RAW AmigaDOS error alongside the translated errno.
+ *
+ * The table below folds two genuinely different failures into one errno:
+ *
+ *     ERROR_OBJECT_IN_USE    (218) -> EACCES    something still holds the file
+ *     ERROR_DELETE_PROTECTED (222) -> EACCES    the file's 'd' bit is clear
+ *
+ * Both print as "Permission denied", and they need opposite fixes -- one is
+ * a handle still open somewhere, the other is a protection bit set at
+ * creation. bsy.c's "could not remove own lock" has been reporting EACCES for
+ * days without us being able to tell which. Callers can now read the real
+ * code via amiga_last_dos_err(). */
+static LONG amiga_last_ioerr = 0;
+
+LONG amiga_last_dos_err (void)
+{
+  return amiga_last_ioerr;
+}
+
 static int amiga_dos_err_to_errno (LONG dosErr)
 {
   switch (dosErr)

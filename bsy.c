@@ -222,7 +222,17 @@ static int bsy_unlink (char *path)
    * reads as busy until kill-old-bsy expires it. Message deliberately differs
    * from sdelete()'s "error unlinking" so the two paths stay tellable apart
    * in the log. */
+#ifdef AMIGA
+  /* v10.27: print the raw AmigaDOS code too. EACCES here is ambiguous --
+   * ERROR_OBJECT_IN_USE (218) means something still holds the file, while
+   * ERROR_DELETE_PROTECTED (222) means its 'd' protection bit is clear. Both
+   * render as "Permission denied", and they need opposite fixes, so the plain
+   * errno has not been enough to tell them apart. */
+  Log (1, "could not remove own lock `%s': %s (AmigaDOS %ld)",
+       path, strerror (errno), UNLINK_DOSERR ());
+#else
   Log (1, "could not remove own lock `%s': %s", path, strerror (errno));
+#endif
 #else
   rc = sdelete (path);
 #endif
