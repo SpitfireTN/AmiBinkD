@@ -272,14 +272,14 @@ struct tm *safe_localtime(time_t *t, struct tm *tm)
 
 void InitLog(int loglevel, int conlog, char *logpath, void *first)
 {
-  LockSem(&lsem);
+  LockSem(LOG_SEM);
   xfree(current_logpath);
   current_logpath  = NULL;   /* just in case if xstrdup() fails */
   current_loglevel = loglevel;
   current_conlog   = conlog;
   current_logpath  = xstrdup(logpath);
   current_nolog    = (struct maskchain *)first;
-  ReleaseSem(&lsem);
+  ReleaseSem(LOG_SEM);
 }
 
 void vLog (int lev, char *s, va_list ap)
@@ -312,7 +312,7 @@ void vLog (int lev, char *s, va_list ap)
 
     if (lev <= current_conlog && !inetd_flag)
     {
-      LockSem(&lsem);
+      LockSem(LOG_SEM);
       /* Same layout as the file log below. The poll is run from CNet's
        * FTN menu entry, so this lands on the sysop's screen -- having the
        * screen and the log read identically is worth the extra columns
@@ -321,7 +321,7 @@ void vLog (int lev, char *s, va_list ap)
            tm.tm_mday, month[tm.tm_mon], tm.tm_hour, tm.tm_min, tm.tm_sec,
            (unsigned) PID (), buf, (lev >= 0) ? "\n" : "");
       fflush (stderr);
-      ReleaseSem(&lsem);
+      ReleaseSem(LOG_SEM);
       if (lev < 0)
         return;
     }
@@ -333,7 +333,7 @@ void vLog (int lev, char *s, va_list ap)
       FILE *logfile = 0;
       int i;
 
-      LockSem(&lsem);
+      LockSem(LOG_SEM);
       /* AMIGA: pause between retries. Ten fopen()s back-to-back take
        * microseconds, so a task holding the log for even a few ms makes
        * every attempt fail and the message is dropped silently below --
@@ -356,7 +356,7 @@ void vLog (int lev, char *s, va_list ap)
       }
       else
         fprintf (stderr, "Cannot open %s: %s!\n", using_logpath, strerror (errno));
-      ReleaseSem(&lsem);
+      ReleaseSem(LOG_SEM);
     }
 #ifdef WIN32
 #ifdef BINKD9X

@@ -231,6 +231,7 @@ void usage (void)
 	  "  -h       print this help\n"
 	  "\n"
 	  "Copyright (c) 1996-2009 Dima Maloff and others.\n"
+	  "Modern port by Gary (Spitfire) McCulloch. SpitfireTN Entertainment.\n"
 	  );
 
   puts ("\n"
@@ -637,7 +638,7 @@ int main (int argc, char *argv[])
    * ("-p -r -PALL AmiBinkd:AmiBinkd.cfg"), pushing this to 120 columns --
    * the only line in a poll that wrapped twice on an 80-column screen.
    * The arguments are in the config and the script, not worth the width. */
-  Log (4, "BEGIN, AmiBinkd v10.24 " MYNAME "/" MYVER);
+  Log (4, "BEGIN, AmiBinkd v10.25 " MYNAME "/" MYVER);
 #else
   Log (4, "BEGIN, " MYNAME "/" MYVER "%s%s", get_os_string(), tmp);
 #endif

@@ -3,6 +3,8 @@
  */
 #include <exec/exec.h>
 #include <dos/dos.h>
+#include <exec/memory.h>
+#include <exec/semaphores.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <string.h>
@@ -111,4 +113,62 @@ int _WaitSem(void *vpSem, int sec) {
     Delay(AMIGA_DELAY_TICKS_PER_SEC);
     elapsed++;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * v10.25: a PUBLIC semaphore for the log.
+ *
+ * _InitSem() above builds a private SignalSemaphore in the caller's own
+ * memory. That serialises writers inside ONE AmiBinkd instance, which is all
+ * upstream binkd ever needs -- it is a single process with threads.
+ *
+ * This port is not. The inbound server and each 30-minute poll are SEPARATE
+ * program invocations, so there are two or three AmiBinkd instances alive at
+ * once, each with its own private lsem, all fprintf()ing the same log file.
+ * Nothing serialises them against each other, and their output interleaves
+ * mid-line. Observed 2026-08-18:
+ *
+ *     + 18 Aug 21:07:52 [1081963032] pwd protected session (MD5)
+ *     nux/64                      <- torn out of "Linux/64"
+ *     115                         <- torn out of "binkd/1.1a-115"
+ *       18 Aug 19:41:42 [1081963032] servmgr started
+ *
+ * Two lines shredded into fragments, and a 19:41 line landing after a 21:07
+ * one. Exec's public semaphore list is the standard AmigaOS answer: every
+ * instance looks up the SAME named semaphore, so the log lock finally spans
+ * processes.
+ *
+ * Forbid()/Permit() around the find-or-create is required -- without it two
+ * instances starting simultaneously can both fail the lookup and both add a
+ * semaphore under the same name.
+ * ------------------------------------------------------------------ */
+
+#define AMIGA_LOG_SEM_NAME "AmiBinkd.log"
+
+void *amiga_public_log_sem(void)
+{
+    static struct SignalSemaphore *cached = NULL;
+    struct SignalSemaphore *sem;
+
+    if (cached != NULL)
+        return cached;
+
+    Forbid();
+    sem = (struct SignalSemaphore *) FindSemaphore ((STRPTR) AMIGA_LOG_SEM_NAME);
+    if (sem == NULL)
+    {
+        sem = (struct SignalSemaphore *)
+              AllocMem (sizeof (struct SignalSemaphore), MEMF_PUBLIC | MEMF_CLEAR);
+        if (sem != NULL)
+        {
+            InitSemaphore (sem);
+            sem->ss_Link.ln_Name = (char *) AMIGA_LOG_SEM_NAME;
+            sem->ss_Link.ln_Pri  = 0;
+            AddSemaphore (sem);
+        }
+    }
+    Permit();
+
+    cached = sem;
+    return sem;
 }

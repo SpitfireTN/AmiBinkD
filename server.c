@@ -259,8 +259,6 @@ static int do_server(BINKD_CONFIG *config)
       sockfd_used++;
     }
 
-    Log (3, "servmgr listen on %s:%s", listen_list->addr[0] ? listen_list->addr : "*", listen_list->port);
-  
     freeaddrinfo(aiHead);
   }
 

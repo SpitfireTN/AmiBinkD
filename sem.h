@@ -151,6 +151,15 @@ int _CleanEventSem (void *);
 #if defined(HAVE_THREADS) || defined(AMIGA)
 extern MUTEXSEM hostsem;
 extern MUTEXSEM resolvsem;
+#ifdef AMIGA
+/* v10.25: the log lock must span PROCESSES, not just Tasks -- the inbound
+ * server and each poll are separate AmiBinkd invocations writing one file.
+ * A private lsem let their output interleave mid-line. See amiga/sem.c. */
+void *amiga_public_log_sem (void);
+#define LOG_SEM (amiga_public_log_sem() ? amiga_public_log_sem() : (void *)&lsem)
+#else
+#define LOG_SEM ((void *)&lsem)
+#endif
 extern MUTEXSEM lsem;
 extern MUTEXSEM blsem;
 extern MUTEXSEM varsem;
