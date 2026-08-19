@@ -218,21 +218,34 @@ static int bsy_unlink (char *path)
     if (!(errno == EPERM || errno == EACCES || errno == EAGAIN || errno == ETXTBSY))
       break;
   }
-  /* Kept at level 1: this is not cosmetic. The lock survives, so the node
-   * reads as busy until kill-old-bsy expires it. Message deliberately differs
-   * from sdelete()'s "error unlinking" so the two paths stay tellable apart
-   * in the log. */
-#ifdef AMIGA
-  /* v10.27: print the raw AmigaDOS code too. EACCES here is ambiguous --
-   * ERROR_OBJECT_IN_USE (218) means something still holds the file, while
-   * ERROR_DELETE_PROTECTED (222) means its 'd' protection bit is clear. Both
-   * render as "Permission denied", and they need opposite fixes, so the plain
-   * errno has not been enough to tell them apart. */
-  Log (1, "could not remove own lock `%s': %s (AmigaDOS %ld)",
-       path, strerror (errno), UNLINK_DOSERR ());
-#else
-  Log (1, "could not remove own lock `%s': %s", path, strerror (errno));
-#endif
+
+  /* v10.28: quieten a race that is not a fault.
+   *
+   * Measured over 12 hours: 106 of these logged, yet Echomail:Outbound held
+   * only the two locks of the current cycle -- the files ARE being removed,
+   * just not always by the Process that complains. binkd runs each session as
+   * its own AmigaOS Process (branch.c), and five of them were seen racing to
+   * clear the same .bsy. The loser logs an error for work the winner already
+   * did.
+   *
+   * ENOENT is that race, plainly: the lock is gone, which is the outcome we
+   * wanted. Nothing is wrong, so say nothing. 18 of the 106 were this.
+   *
+   * The rest are dropped from level 1 to level 3. Level 1 is for things that
+   * need attention, and this does not: the lock expires under kill-old-bsy,
+   * the directory does not accumulate, and no mail is lost. Keeping it at
+   * level 1 trained the eye to skim real errors.
+   *
+   * The AmigaDOS code that v10.27 added is NOT printed here any more. It
+   * reported 0 on all 44 samples -- impossible, since IoErr()==0 maps to EIO
+   * while every message said EACCES. amiga_last_ioerr is a static, and these
+   * are separate Processes sharing one address space, so concurrent writers
+   * corrupt it. Same defect class as mypid, fixed in v10.26. Left in
+   * amiga/delete.c but no longer trusted or shown. */
+  if (errno == ENOENT)
+    return 0;                    /* another Process won the race: job done */
+
+  Log (3, "could not remove own lock `%s': %s", path, strerror (errno));
 #else
   rc = sdelete (path);
 #endif
