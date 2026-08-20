@@ -1,6 +1,6 @@
 AMIBINKD MANUAL
 Native AmigaOS 3.x port of binkd, the FTN mailer
-Version 10.25
+Version 10.31
 ===============================================================================
 
 Author (Amiga port): Gary "Spitfire" McCulloch
@@ -1164,6 +1164,77 @@ authentication -- is unchanged from upstream binkd.
 ===============================================================================
 18. VERSION HISTORY
 ===============================================================================
+
+v10.31 - A Log You Can Read Without Editing It
+---------------------------------------------
+
+* At loglevel 4 a single received file cost three lines and one OPT exchange
+  cost seven:
+
+      - receiving 86be1d03.pkt (2249 byte(s), off 0)
+      + 86be1d03.pkt -> DH3:Echomail/Inbound/86be1d03.pkt
+      + rcvd: 86be1d03.pkt (2249, 2249.00 CPS)
+
+  Measured over one night, the remote's greeting block alone (OPT, ZYZ, LOC,
+  NDL, TIME, VER, BUILD, TRF, QSIZE) was 22% of the log -- all of it emitted
+  by one Log() call in the M_NUL handler.
+
+  Level 4 is now meant to be read as-is: one line per connection, one per
+  file, one per result, plus the remote's SYS name and FTN addresses. The
+  detail moved to level 5 and above, where raising loglevel brings it back.
+  A 139-line poll window became 54.
+
+* Removed AmiBinkD's own "handoff:" debug lines from normal view (now level
+  7). Those trace the AmigaOS ReleaseSocket/ObtainSocket dance used to pass a
+  socket to a child process. Upstream binkd forks and inherits the descriptor,
+  so it has no equivalent message -- this port had been printing its own
+  internals, including pointers and file descriptor numbers, into every
+  sysop's log since v10.17.
+
+* The benign .bsy unlink race is now level 5. It is a race between processes,
+  not a fault, and nothing accumulates on disk -- but at level 4 it produced
+  dozens of "could not remove own lock ... Permission denied" lines a night,
+  which reads like a broken install.
+
+* Because level 4 no longer needs trimming, the "nolog" masks are gone from
+  the example config. "nolog" is unchanged and still documented (manual
+  section 06) for masking a message once you have RAISED loglevel.
+
+* Protocol and behaviour are untouched. Every change was a log level.
+
+
+v10.30 - One Line Per Inbound Connection
+----------------------------------------
+
+* An inbound connection was announced twice, by two different processes:
+
+      incoming from 72.58.128.97 (60539)
+      Incoming: 72.58.128.97
+
+  The first is kept and renamed -- it carries the port, which the second did
+  not -- and the second is now outbound-only. Outbound output is unchanged.
+
+  One consequence worth knowing: inbound peers are shown by IP rather than
+  reverse-DNS name, because the accepting code resolves numerically on
+  purpose. The session logs the remote's own SYS/ZYZ/LOC identity moments
+  later, so the peer is not anonymous.
+
+
+v10.26 to v10.29 - Session IDs and a Quieter Lock Race
+------------------------------------------------------
+
+* Every session logged the same id, so concurrent sessions could not be told
+  apart in the log. Each session now logs its own AmigaOS task id.
+
+  This is the shared-address-space trap that runs through this port: sessions
+  are separate Processes but share ONE address space, so a file-scope static
+  is shared by all of them. (v10.27 promptly reintroduced the same bug in a
+  diagnostic and v10.29 removed it again.)
+
+* Failing to remove our own .bsy lock is no longer reported as a fault when
+  another process got there first -- that is the job done, not an error.
+
+
 
 v10.25 - Log Lines Stop Being Shredded
 --------------------------------------

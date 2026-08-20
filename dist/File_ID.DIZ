@@ -1,11 +1,11 @@
-AmiBinkD v10.25 - SpitfireTN Ent.
+AmiBinkD v10.31 - SpitfireTN Ent.
 -=====================================-
 Native AmigaOS FTN mailer, binkd port.
 No ixemul/ixnet -- talks straight to
-bsdsocket.library. BinkP protocol,
-CRAM-MD5 auth, FTN mail for C-Net/5
-and other BBS engines. Fixes shredded
-log lines and outbound 0-byte mail.
+bsdsocket.library. BinkP protocol with
+CRAM-MD5 auth, for any Amiga BBS. Log
+reads clean at the default level -- no
+masks to tune, no duplicate lines.
 -=====================================-
 .--------https://www.rofbbs.com-------.
 | _____     _____                     |
