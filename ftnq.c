@@ -473,6 +473,34 @@ static void process_bsy (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
     char buf[FTN_ADDR_SZ + 1];
 
     ftnaddress_to_str (buf, fa);
+
+    /* v10.32: an address with no node entry has nowhere to keep state, so
+     * BOTH safety mechanisms in this function are inert for it -- the
+     * hold_until check above and the give-up counter below are each guarded
+     * on node != NULL. Without this branch the result is an unbounded retry:
+     * on 2026-08-20 a corrupted address (80:774/999@amiganet -- wrong domain,
+     * invented node, parsed out of a .bsy whose contents had been overwritten
+     * with log text) span here from 12:00 until the 18:52 restart, wrote 2.2
+     * million lines / 181MB, and stopped every outbound poll for 6h52m while
+     * inbound carried on normally.
+     *
+     * One unlink attempt, then leave it. An orphan lock for a node we do not
+     * carry is harmless -- nothing polls that node -- whereas retrying it is
+     * not. The failure path logs at 6 so it cannot flood a default log even
+     * if it is reached every rescan.
+     *
+     * This does NOT fix the corruption that produced the bad address; it
+     * bounds the damage when one appears. See the .bsy contents recorded in
+     * ~/amibinkd-soak-archive/v10.31-BSY-LOOP-20260820-1851/. */
+    if (node == NULL)
+    {
+      if (UNLINK (path) == 0)
+        Log (4, "removed stale %s for unknown node %s", s, buf);
+      else
+        Log (6, "stale %s for unknown node %s: %s", s, buf, strerror (errno));
+      return;
+    }
+
     Log (2, "found old %s file for %s", s, buf);
 
     /* v10.20: ONE non-blocking attempt. Deliberately not sdelete(), which
