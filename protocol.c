@@ -3358,17 +3358,29 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
 #ifndef HAVE_THREADS
   setproctitle ("%c [%s]", to ? 'o' : 'i', state.peer_name);
 #endif
-  if (strcmp(state.ipaddr, state.peer_name))
-    Log (2, "%s %s%s%s [%s]",
-       to ? "Outgoing:" : "Incoming:",
-       state.peer_name,
-       current_port ? ":" : "", current_port ? current_port : "",
-       state.ipaddr);
-  else
-    Log (2, "%s %s%s%s",
-       to ? "Outgoing:" : "Incoming:",
-       state.peer_name,
-       current_port ? ":" : "", current_port ? current_port : "");
+  /* v10.30: OUTBOUND only. server.c already logs "Incoming: <ip> (<port>)"
+   * when it accepts, so a second line here meant two entries per inbound
+   * session, from two different Processes. The server's line is the one to
+   * keep: it carries the port, which current_port does not hold for inbound.
+   *
+   * Cost: the reverse-DNS name for inbound peers, which this line had and
+   * the server's does not (server.c resolves numerically on purpose). The
+   * session logs the remote's own SYS/ZYZ/LOC identity moments later, so the
+   * peer is not anonymous.
+   *
+   * Outbound is untouched -- it keeps both name and port. */
+  if (to)
+  {
+    if (strcmp(state.ipaddr, state.peer_name))
+      Log (2, "Outgoing: %s%s%s [%s]",
+         state.peer_name,
+         current_port ? ":" : "", current_port ? current_port : "",
+         state.ipaddr);
+    else
+      Log (2, "Outgoing: %s%s%s",
+         state.peer_name,
+         current_port ? ":" : "", current_port ? current_port : "");
+  }
 
   /* v10.7: same peernamesem protection as the getpeername() call above -
    * getsockname()'s TCPERR() read is just as exposed to a sibling

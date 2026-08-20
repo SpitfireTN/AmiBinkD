@@ -385,11 +385,11 @@ static int do_server(BINKD_CONFIG *config)
             host, sizeof(host), service, sizeof(service),
             NI_NUMERICHOST | NI_NUMERICSERV);
         if (aiErr == 0) 
-          Log (3, "incoming from %s (%s)", host, service);
+          Log (2, "Incoming: %s (%s)", host, service);
         else
         {
           Log(2, "Error in getnameinfo(): %s (%d)", gai_strerror(aiErr), aiErr);
-          Log(3, "incoming from unknown");
+          Log(2, "Incoming: unknown");
         }
   
         /* Creating a new process for the incoming connection */
