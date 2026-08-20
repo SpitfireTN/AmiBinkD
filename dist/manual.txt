@@ -1,0 +1,2078 @@
+AMIBINKD MANUAL
+Native AmigaOS 3.x port of binkd, the FTN mailer
+Version 10.25
+===============================================================================
+
+Author (Amiga port): Gary "Spitfire" McCulloch
+Upstream project:     binkd (https://github.com/pgul/binkd)
+Site:                 https://www.rofbbs.com
+BBS:                  call.rofbbs.com:6800
+
+This manual documents the AmigaOS-specific parts of AmiBinkD: what changed
+from stock binkd, how to install and run it on a real or emulated Amiga,
+the configuration keywords actually used in a working setup, and every
+real-hardware behavioral quirk found while porting it. For a short
+Aminet-style overview, see readme.txt.
+
+This manual does NOT attempt to replace upstream binkd's own
+documentation of the BinkP protocol, FTN packet format, or the full
+config-file keyword list -- binkd has many keywords this port never
+exercised and never needed to touch. Everywhere this manual is silent on
+a keyword or behavior, assume it matches stock binkd.
+
+
+===============================================================================
+TABLE OF CONTENTS
+===============================================================================
+
+01. What AmiBinkD Does
+02. Requirements
+03. Files Included
+04. Recommended Directory Layout
+05. Concurrency -- More Than One Session At A Time
+06. Configuration Reference
+07. Multi-Network Setup
+08. Running The Program
+09. Driver Scripts (AmigaDOS Execute Pattern)
+10. Logging
+11. Testing Procedure
+12. Troubleshooting
+13. Best Practices
+14. Security Notes
+15. Real-Hardware Findings (Amiberry bsdsocket_emu)
+16. Known Limitations / Not Done Yet
+17. Differences From Stock Upstream binkd
+18. Version History
+19. Disclaimer
+20. Credits and Contact
+
+
+===============================================================================
+01. WHAT AMIBINKD DOES
+===============================================================================
+
+AmiBinkD sends and receives FTN (FidoNet Technology Network) mail over
+TCP/IP using the BinkP protocol. It is the same job stock binkd does on
+Unix/Windows/etc, cross-compiled and adapted to run natively on classic
+AmigaOS 3.x -- no ixemul.library, no ixnet.library.
+
+Outbound (client/poll mode, "-p -P<address>"):
+
+1. Connects to the configured host:port for that node.
+2. Performs the BinkP handshake (protocol/option negotiation, CRAM-MD5
+   password authentication if a node password is configured).
+3. Exchanges SYS/LOC/ZYZ/TIME/VER/BUILD system info with the remote.
+4. Sends any mail/files queued in that domain's outbound directory.
+5. Receives any mail/files the remote has queued for you.
+6. Closes the session cleanly.
+
+Inbound (server mode, "-s"):
+
+1. Listens on the configured TCP port.
+2. Accepts a connection, performs the same handshake, authenticates the
+   remote against your configured node password (or accepts as
+   non-secure if none is configured and send-if-pwd allows it).
+3. Exchanges mail/files.
+4. Returns to listening for the next connection.
+
+Received files land in your configured inbound directory as standard
+.pkt (packet) or file-echo files, ready for your tosser (e.g. C-Net/5's
+Toss) to process. AmiBinkD itself does not parse message content -- it
+only moves FTN transport-layer files.
+
+
+===============================================================================
+02. REQUIREMENTS
+===============================================================================
+
+* Commodore Amiga, real or emulated, AmigaOS 3.0 or newer (m68k)
+* bsdsocket.library -- tested against Amiberry's bsdsocket_emu; should
+  work against real Roadshow/AmiTCP but has not been verified there (see
+  section 15 before assuming a finding applies beyond Amiberry)
+* An FTN-aware BBS engine or tosser (built and tested against C-Net/5
+  Amiga Pro; AmiBinkD itself is BBS-agnostic -- it only reads/writes
+  standard FTN outbound-flow and packet files)
+* At least one FTN address and a hub/uplink willing to carry your mail
+* TCP/IP connectivity to that hub (a real or forwarded port for inbound)
+
+AmiBinkD is a standalone compiled executable with no ixemul.library or
+ixnet.library dependency of any kind.
+
+
+===============================================================================
+03. FILES INCLUDED
+===============================================================================
+
+The AmiBinkD package should include:
+
+AmiBinkD                  Compiled AmigaOS executable (m68k, AmigaOS 3.0+)
+AmiBinkD.info             Workbench icon (AmigaOS 3.5+ for the colour
+                          image; older Workbench shows a generic one)
+readme.txt                Short Aminet-style overview
+manual.txt                This document
+amibinkd-example.cfg      Example configuration file
+amibinkd.scr              Example AmigaDOS poll-all driver script
+
+Copy amibinkd-example.cfg to a config name of your choosing before
+editing it -- see section 07 for whether you want one config file or
+several.
+
+amibinkd.scr is a ready-to-edit "-P ALL" poll script (see sections 07
+and 09) -- point it at your own config name and schedule it from your
+BBS's event/maintenance system.
+
+
+===============================================================================
+04. RECOMMENDED DIRECTORY LAYOUT
+===============================================================================
+
+A working setup looks like:
+
+AmiBinkD:AmiBinkD              the executable
+AmiBinkD:AmiBinkD.cfg          config used by the inbound server (-s)
+AmiBinkD:<net>.cfg             one config per network, used for polling
+AmiBinkD:<net>.scr             one small Execute script per network
+SysData:log/<net>.log          one log per network (or a shared log)
+DH3:Echomail/Outbound/         per-domain outbound flow files
+DH3:Echomail/Inbound/          received packets/files land here
+DH3:Echomail/Inbound_Temp/     in-progress receive staging
+
+These paths match this port's own deployment (Reign of Fire BBS,
+C-Net/5); adjust to your own system's assigns. What matters is that
+every "domain" line's outbound directory, and the inbound/temp-inbound
+directories, actually exist before you run AmiBinkD -- it does not
+create them for you.
+
+
+===============================================================================
+05. CONCURRENCY -- MORE THAN ONE SESSION AT A TIME
+===============================================================================
+
+Through v10.4, this port ran every BinkP session synchronously, one at a
+time -- classic AmigaOS has no fork()/pthreads without ixemul.library
+(deliberately avoided here), so stock binkd's own "DOS" build fallback
+(in-process, no forking) was used for AMIGA too.
+
+v10.5 adds real concurrency: each session (inbound or outbound) now runs
+as its own genuine AmigaOS process, spawned via CreateNewProcTags(). This
+works because classic AmigaOS has one flat, shared address space -- no
+fork()-style address-space isolation -- so a process spawned this way
+sees the same globals, heap, and open library bases as its parent,
+closer in practice to a thread than to a Unix fork(). An inbound
+connection arriving mid-poll, or two outbound sessions whose schedules
+happen to overlap, no longer have to wait their turn.
+
+How many sessions can actually run at once is governed by the existing
+"maxclients"/"maxservers" config keywords (see section 06) -- these
+always existed in stock binkd but were never meaningfully exercised
+before, since only one session ever ran regardless of their setting.
+
+Nothing about how you configure or invoke AmiBinkD changes because of
+this -- multiple "-P address" arguments, or a driver script invoking it
+multiple times in sequence (section 09), work exactly as before. The
+difference is purely that overlapping sessions no longer serialize.
+
+This is worth knowing about before using "-P ALL" (added in v10.15, see
+section 07): it makes every node in your config pollable in a single
+run, so "maxclients" is what decides how many of them AmiBinkD calls at
+the same time. Its default is 100, i.e. effectively all of them at once.
+See section 06.
+
+KNOWN, ACCEPTED LIMITATIONS OF THIS FIRST CONCURRENT RELEASE
+
+* errno is a single global, shared by every concurrently-running
+  session (classic AmigaOS again -- no per-process errno shadowing in
+  this toolchain's C library). A retry/diagnostic path that reads errno
+  right after a failed call could occasionally see a value a different,
+  concurrently-running session's own call just set. This was thought
+  rare in practice at the time this release shipped -- confirmed
+  otherwise shortly after under a real burst of simultaneous inbound
+  connections, and fixed (for the specific getpeername()/getsockname()
+  critical section that raced) in v10.7. See v10.7's changelog entry and
+  section 16 for what's still not covered.
+* mypid (used in CRAM-MD5 challenge nonces) and rand()'s own internal
+  state are likewise single shared globals across concurrent sessions.
+  Nonces still combine with per-session timing/data, so this is a minor
+  reduction in entropy variety between simultaneous sessions' nonces,
+  not a security-relevant weakness.
+* Shutdown while a session is still genuinely stuck (e.g. blocked
+  indefinitely on a hung read) makes AmiBinkD wait rather than time out
+  and exit anyway -- see section 12's entry on this. This is deliberate:
+  a CreateNewProcTags(NP_Entry=...) child has no segment-list reference
+  of its own to the code it's running, only the parent's does, so
+  letting the parent's own exit() complete while a child was still
+  running would risk the child executing out of memory that exit() had
+  already freed. A wedged shutdown is recoverable (see section 12); a
+  crash is worse.
+
+True AmigaOS-native concurrency was the one open item in section 16's
+"Known Limitations" this release actually closes.
+
+
+===============================================================================
+06. CONFIGURATION REFERENCE
+===============================================================================
+
+AmiBinkD uses the same config file format as stock binkd: one keyword
+per line, "#" starts a comment, blank lines ignored. This section covers
+only the keywords actually used in this port's own working configs --
+stock binkd has additional keywords this setup never needed; consult
+upstream binkd's own documentation for the complete list.
+
+
+-------------------------------------------------------------------------------
+domain <name> <outbound-path> <zone>
+-------------------------------------------------------------------------------
+
+Declares an FTN domain/network: its name, where its outbound flow files
+live, and its zone number. One line per network you carry.
+
+  domain cnet DH3:Echomail/Outbound/ 64
+
+Alias form -- lets a hub/link refer to the same domain under another
+name (case variants, alternate spellings):
+
+  domain commodorenet alias-for cnet
+
+
+-------------------------------------------------------------------------------
+address <ftn-address>@<domain>
+-------------------------------------------------------------------------------
+
+Your own FTN address within a domain. One line per domain/network.
+
+  address 64:500/1@cnet
+
+
+-------------------------------------------------------------------------------
+sysname / location / sysop
+-------------------------------------------------------------------------------
+
+Free-text strings sent to remote nodes during the handshake and shown in
+your log.
+
+  sysname "Reign of Fire BBS"
+  location "Chattanooga, TN"
+  sysop "Gary McCulloch"
+
+
+-------------------------------------------------------------------------------
+nodeinfo
+-------------------------------------------------------------------------------
+
+Capability string advertised to remote nodes.
+
+  nodeinfo 115200,TCP,BINKP
+
+
+-------------------------------------------------------------------------------
+iport
+-------------------------------------------------------------------------------
+
+TCP port for inbound connections (server mode).
+
+  iport 24554
+
+Leave this unchanged unless you have a specific reason to run on a
+non-standard port and both sides agree.
+
+
+-------------------------------------------------------------------------------
+connect-timeout
+-------------------------------------------------------------------------------
+
+Seconds to wait for an outbound connect() to a hub/node to complete
+before giving up. Defaults to 0 (disabled -- wait forever), same as
+stock binkd on every platform.
+
+  connect-timeout 60
+
+HAS NO EFFECT ON AMIGA as of v10.11 -- v10.8 and v10.10 both tried to
+implement it here (non-blocking socket + select(), then non-blocking
+socket + a poll loop) and both failed live against a real remote: a
+connection that had genuinely completed at the TCP level was never
+recognized as connected by either technique, hanging the process
+indefinitely regardless of this setting. Non-blocking connect() itself
+doesn't reliably work on this bsdsocket_emu. Reverted to plain blocking
+connect() -- see v10.11's changelog entry. Still set to 60 in all 8 of
+this BBS's deployed configs as a harmless no-op, in case a future
+toolchain/emulator fix makes it meaningful again; a genuinely
+unresponsive remote is bounded only by the host's own underlying TCP
+stack timeout now, not by this setting.
+
+Note this is unrelated to hostname resolution, which happens before
+connect() and is a separate matter -- see v10.9's, v10.13's, and v10.14's
+changelog entries. As of v10.14, hostname resolution is a normal
+gethostbyname() call again, same as every other platform this codebase
+supports; no separate cache file or host-side script is involved.
+
+
+-------------------------------------------------------------------------------
+maxclients / maxservers / call-delay
+-------------------------------------------------------------------------------
+
+  maxclients 2
+  maxservers 4
+  call-delay 5
+
+maxclients caps how many outbound sessions run at the same time;
+maxservers does the same for inbound ones. Both default to 100. These
+are stock binkd keywords that meant nothing on this port before v10.5
+(only one session ever ran, whatever they were set to) and mean very
+little with one-node-per-invocation polling either, since there is only
+ever one node to call.
+
+They matter as soon as you use "-P ALL" (section 07). Seven networks in
+one invocation with the default maxclients means seven simultaneous
+outbound sessions. That may well be fine; it is simply a different load
+profile from the one-at-a-time driver-script pattern most setups grew
+up on, and on a real 68k with modest RAM it is worth choosing
+deliberately rather than inheriting. maxclients 2 is a reasonable
+middle ground; maxclients 1 gives you strictly sequential polling
+without needing separate scripts.
+
+call-delay is how long the client manager waits before looking for more
+work when maxclients sessions are already running. It defaults to 60,
+which means a capped "-P ALL" run sits idle for a full minute between
+each batch of calls. If you set maxclients low, set call-delay low too
+-- 5 seconds is plenty.
+
+
+-------------------------------------------------------------------------------
+rescan-delay
+-------------------------------------------------------------------------------
+
+Minimum seconds between outbound-queue rescans.
+
+  rescan-delay 1
+
+
+-------------------------------------------------------------------------------
+send-if-pwd
+-------------------------------------------------------------------------------
+
+If present, AmiBinkD will only send (not just receive) files during a
+session that authenticated with a password. A reasonable safety default
+for inbound sessions from unconfigured/unknown addresses.
+
+
+-------------------------------------------------------------------------------
+log / loglevel / conlog
+-------------------------------------------------------------------------------
+
+  log SysData:log/AmiBinkD.log
+  loglevel 4
+
+log sets the logfile path. loglevel (1-9) sets verbosity. Level 4 is the
+default and is meant to be readable without further tuning: one line per
+connection, one per file transferred, one per result, plus the remote's
+SYS name and FTN addresses. Level 5 and above add the full protocol
+conversation -- the remote's greeting block (OPT/ZYZ/LOC/NDL/TIME/VER/
+BUILD/TRF/QSIZE), mode negotiation, per-file `receiving'/`-> Inbound'
+bookkeeping, connection attempts, and internal housekeeping such as
+"downing clientmgr...". Level 7 adds the AmigaOS socket handoff trace.
+
+  conlog 4
+
+Uncomment/add conlog to also echo log output to the console/Shell
+AmiBinkD was run from -- useful while testing interactively, noisy for
+an unattended scheduled run.
+
+
+-------------------------------------------------------------------------------
+percents
+-------------------------------------------------------------------------------
+
+Print live transfer-progress percentages during send/receive. Cosmetic,
+console/interactive-session only.
+
+NOTE: this port's own deployment found that "printq" (list the queue
+after each rescan) is safe to configure but was removed from this port's
+production configs during troubleshooting as a diagnostic step -- it
+was not actually the cause of anything and can be left enabled if you
+want the extra queue-listing output. See section 15 if you're chasing a
+different symptom and considering removing it again.
+
+
+-------------------------------------------------------------------------------
+backresolv
+-------------------------------------------------------------------------------
+
+Perform reverse DNS lookups for nicer hostnames in the log.
+Cosmetic-only -- see section 15, finding 6, before enabling this if
+you might receive inbound connections from a private/non-routable
+address; it can hang an entire session on this port.
+
+
+-------------------------------------------------------------------------------
+inbound / inbound-nonsecure / temp-inbound
+-------------------------------------------------------------------------------
+
+  inbound DH3:Echomail/Inbound/
+  inbound-nonsecure DH3:Echomail/Inbound/
+  temp-inbound DH3:Echomail/Inbound_Temp/
+
+Where received files land (inbound, for password-authenticated sessions;
+inbound-nonsecure for unauthenticated ones -- can point at the same
+directory), and where in-progress receives are staged before being
+renamed into place (temp-inbound).
+
+
+-------------------------------------------------------------------------------
+minfree / minfree-nonsecure
+-------------------------------------------------------------------------------
+
+  minfree 2048
+  minfree-nonsecure 2048
+
+Refuse new incoming files once free space (in KB) on the inbound
+volume drops below this threshold.
+
+
+-------------------------------------------------------------------------------
+kill-dup-partial-files / kill-old-partial-files / kill-old-bsy
+-------------------------------------------------------------------------------
+
+  kill-dup-partial-files
+  kill-old-partial-files 1d
+  kill-old-bsy 2h
+
+Housekeeping: remove a duplicate partial file when starting a fresh
+receive; remove partial files older than the given age; remove stale
+.bsy/.csy busy-flag files (normally left behind only by a crash or
+abnormal exit) older than the given age. See section 15 for this port's
+own finding about .bsy/.csy files -- kill-old-bsy does not appear to
+clear the specific busy-file condition seen there, which resolves itself
+each session regardless.
+
+
+-------------------------------------------------------------------------------
+nolog
+-------------------------------------------------------------------------------
+
+  nolog receiving*
+  nolog *->*Inbound*
+
+Suppress any log message matching a mask. Case-insensitive, matched
+against the whole message text after formatting. Repeatable.
+
+YOU PROBABLY DO NOT NEED THIS. At the default loglevel 4 the log is already
+one line per connection, one per file and one per result -- the detail that
+used to need masking (the remote's greeting block, mode negotiation, the
+per-file `receiving'/`-> Inbound' bookkeeping, socket handoff) now sits at
+level 5 and above and simply does not appear. `nolog' is for the case where
+you have RAISED loglevel to chase something and want to keep one specific
+message out of the way.
+
+Use it to shape the log rather than editing message strings -- it needs no
+rebuild, is reversible by commenting a line out, and keeps this port's
+output identical to every other binkd so existing log tools still work.
+
+TWO TRAPS, both learned the hard way:
+
+  1. One mask per WORD. The parser adds every word on the line as its own
+     mask, so "nolog receiving *" adds `receiving' AND `*' -- and `*'
+     matches every message and silences the log completely. Masks must be
+     single tokens. `*' spans spaces on its own, so "*->*Inbound*" still
+     matches "x.pkt -> DH3:Echomail/Inbound/x.pkt".
+
+  2. Masking hides your diagnostics too. If you have raised loglevel to
+     investigate a stall or a socket leak, the messages you are about to
+     mask are very likely the ones you raised it for. A mask makes a grep
+     return zero, which reads as "no sessions" rather than "not logged".
+
+
+-------------------------------------------------------------------------------
+set-file-dates
+-------------------------------------------------------------------------------
+
+  set-file-dates yes
+
+Stamp received files with the sender's timestamp, and keep the datestamps
+on our own .bsy/.csy busy flags fresh while a session runs.
+
+DEFAULT ON THIS PORT: OFF. Every other binkd platform defaults it on, and
+this is the one setting where AmiBinkD deliberately differs.
+
+The reason is that setting a file's date on AmigaOS is SetFileDate(), and
+when another Process holds the object that call does not fail -- it never
+returns. There is no timeout to bound it and no watchdog on the session,
+so a session that touches a file the BBS happens to be cataloguing at that
+moment is simply gone: it keeps its server slot, its socket and its .bsy
+locks forever. On the author's system, with C-Net/5's own overnight
+file-catalog jobs running against the same directories, every single
+inbound commit that reached that call hung -- and one of them landed
+inside a poll client, which meant the BBS event that launched it never
+finished and outbound mail stopped for seventeen hours.
+
+What you give up by leaving it off is cosmetic: received files carry the
+time they arrived rather than the time the sender created them. Nothing in
+the BinkP protocol, in tossing, or in duplicate detection depends on it.
+
+The one non-cosmetic use is the .bsy refresh, which stops a peer's
+kill-old-bsy sweeping a lock out from under a session that is still
+running. That only matters for a session lasting longer than the
+kill-old-bsy age (2h in the sample config), which is far rarer than the
+hang it avoids.
+
+Turn it on only if you know your filesystem does not do this -- for
+example a single-purpose machine where nothing else touches the inbound
+and outbound directories while the mailer runs.
+
+
+-------------------------------------------------------------------------------
+aso
+-------------------------------------------------------------------------------
+
+Use Amiga-style outbound directory/filename conventions. Recommended for
+this port -- it's what this port's own configs use and what has been
+tested.
+
+
+-------------------------------------------------------------------------------
+node <address> <host>:<port> <password>
+-------------------------------------------------------------------------------
+
+  node 1:2/1@example your.hub.example.com:24554 YourAreafixPassword
+
+Your uplink/hub for a given address: where to connect for outbound
+polls, and the password (areafix/BinkP session password) both sides use
+for CRAM-MD5 authentication. One line per node you poll or accept
+authenticated mail from.
+
+Keep real passwords out of anything you might publish or share --
+amibinkd-example.cfg ships with placeholder values only.
+
+
+===============================================================================
+07. MULTI-NETWORK SETUP
+===============================================================================
+
+If you carry more than one FTN network, you have three supported
+patterns (and can mix them):
+
+1. One combined config with every domain/address/node line, polled with
+   "-P ALL" -- one config, one command, every network (v10.15):
+
+     AmiBinkD:AmiBinkD -p -PALL AmiBinkD:AmiBinkD.cfg
+
+   "ALL" is not case-sensitive, and works written either way ("-PALL"
+   or "-P ALL"). AmiBinkD creates a poll for every node line in the
+   config, skipping only nodes with no host to call and your own
+   addresses, then polls them. This is the simplest pattern to
+   maintain: adding a network is one node line, and config-wide changes
+   (a new inbound path, a loglevel bump) are made once instead of once
+   per network.
+
+2. The same combined config, polled with one "-P" argument per network,
+   when you want a specific subset rather than all of them:
+
+     AmiBinkD:AmiBinkD -p -P64:500/0 -P10:100/0 AmiBinkD:AmiBinkD.cfg
+
+3. One config per network, each polled by its own invocation, chained
+   from a driver script (see section 09):
+
+     AmiBinkD:AmiBinkD -p -P64:500/0 AmiBinkD:cnet.cfg
+     AmiBinkD:AmiBinkD -p -P10:100/0 AmiBinkD:araknet.cfg
+
+   This is what this port's own deployment ran in production before
+   v10.15, and it remains useful for polling one network by hand
+   without disturbing the others. Its cost is duplication: seven
+   networks means seven config files and seven scripts to keep in step.
+
+All three are confirmed working, including real inbound file reception
+and successful tosser import, across seven networks in one run.
+
+Note the difference in timing between them. Patterns 1 and 2 hand every
+requested node to a single running AmiBinkD, which will call up to
+"maxclients" of them simultaneously (default 100 -- see sections 05 and
+06). Pattern 3 runs one invocation per network, so its sessions are
+serialized by the driver script itself regardless of any config
+setting.
+
+The combined config (AmiBinkD.cfg, with every domain/address/node line)
+is also what the inbound server ("-s") should use, since it needs to
+recognize every node that might call in, regardless of which pattern you
+use for outbound polling. With pattern 1, the server and the client are
+finally using the same single file.
+
+
+===============================================================================
+08. RUNNING THE PROGRAM
+===============================================================================
+
+Outbound poll, one address:
+
+  AmiBinkD:AmiBinkD -p -P<address> AmiBinkD:<config>
+
+Outbound poll, several addresses in one run:
+
+  AmiBinkD:AmiBinkD -p -P<address1> -P<address2> AmiBinkD:<config>
+
+Outbound poll, every node in the config (v10.15):
+
+  AmiBinkD:AmiBinkD -p -PALL AmiBinkD:<config>
+
+The log records what "-P ALL" decided to do -- one "Polling <address>"
+line per node at loglevel 5, then a summary at loglevel 3:
+
+  ALL: created 7 poll(s)
+
+If a node has no host to call, it is skipped rather than polled (a
+poll file for it would never be acted on), and the summary says so:
+
+  ALL: created 5 poll(s), skipped 2 node(s) with no host
+
+Inbound server (stays running, listens for connections):
+
+  AmiBinkD:AmiBinkD -s AmiBinkD:AmiBinkD.cfg
+
+A small watchdog script pattern -- check whether the server task is
+already running under its expected console name, and start it if not --
+is a reasonable way to keep the inbound server up across reboots without
+starting a duplicate:
+
+  STATUS <>NIL: COM=AmiBinkD
+  IF WARN
+    CD AmiBinkD:
+    run <>NIL: AmiBinkD -s AmiBinkD.cfg WAIT QUIET
+  ENDIF
+
+Run this from your startup sequence, a scheduled event, or a periodic
+maintenance script.
+
+
+===============================================================================
+09. DRIVER SCRIPTS (AMIGADOS EXECUTE PATTERN)
+===============================================================================
+
+A small AmigaDOS Execute script keeps the invocation simple to schedule
+from a menu/event/maintenance command. With "-P ALL" (section 07,
+pattern 1) one script covers every network -- this is amibinkd.scr,
+included in the package:
+
+  ; Poll every network in the config
+  Stack 50000
+  AmiBinkD:AmiBinkD -p -PALL AmiBinkD:AmiBinkD.cfg
+
+and the parent script that your event/maintenance schedule calls needs
+only one entry:
+
+  CD AmiBinkD:
+  Execute amibinkd.scr
+  Wait 1
+
+For the per-network polling pattern (section 07, pattern 3), you write
+one script per network instead:
+
+  Stack 50000
+  AmiBinkD:AmiBinkD -p -P64:500/0 AmiBinkD:cnet.cfg
+
+and the parent script chains them in sequence, one CD/Execute/Wait per
+network:
+
+  CD AmiBinkD:
+  Execute cnet.scr
+  Wait 1
+  CD AmiBinkD:
+  Execute araknet.scr
+  Wait 1
+  ...
+
+That chain is also why the comment-character warning below is worth
+reading: a single bad script aborts every network after it, too.
+
+IMPORTANT: AmigaDOS Execute scripts use ";" for comments, not "#". If a
+script has a "#"-prefixed comment line (for example, left over from a
+Unix-shell-style template), Execute tries to run "#" as a literal,
+nonexistent command, fails immediately with "Unknown command" / "failed
+returncode 10", and -- because the default FAILAT threshold is 10 --
+aborts not just that one script but the entire calling chain. This can
+look exactly like a hang or a code-level bug in AmiBinkD itself; it is
+neither. Always use ";" for comments in these scripts, and if a chained
+poll run stops partway through with no further networks running, check
+the very next script in the chain for a stray "#" line before looking
+anywhere else.
+
+
+===============================================================================
+10. LOGGING
+===============================================================================
+
+AmiBinkD writes to the file configured by "log", at the verbosity set by
+"loglevel". A typical successful outbound session logs, in order:
+
+  BEGIN, ...
+  creating a poll for <address> (`d' flavour)
+  clientmgr started
+  call to <address>
+  trying <host> [<ip>]:<port>...
+  connected
+  outgoing session with <host>:<port> [<ip>]
+  OPT CRAM-MD5-<challenge>
+  Remote requests MD mode
+  SYS / LOC / ZYZ / TIME / VER / BUILD lines
+  addr: <address list from remote's AKA set>
+  pwd protected session (MD5)
+  QSIZE <n> files <n> bytes
+  [receiving/rcvd/sending/sent lines for any files transferred]
+  done (to <address>, OK, S/R: <sent>/<received> (<bytes>))
+  session closed, quitting...
+  the queue is empty, quitting...
+
+A failed connection attempt (bad hostname, DNS not resolving, remote
+down) logs a "getaddrinfo failed: ..." or connection-refused-style
+message instead of "connected", followed by "done (to <address>,
+failed, ...)".
+
+
+===============================================================================
+11. TESTING PROCEDURE
+===============================================================================
+
+Test an outbound poll:
+
+1. Edit your config's "node" line with a real host/port/password for a
+   node you control or that expects your test.
+2. From a Shell:
+
+     AmiBinkD:AmiBinkD -p -P<address> AmiBinkD:<config>
+
+3. Confirm the log shows "connected", a successful handshake, and
+   "done (..., OK, ...)".
+
+Test inbound (server mode):
+
+1. Start the server: AmiBinkD:AmiBinkD -s AmiBinkD:AmiBinkD.cfg
+2. From another system (or another binkd instance), connect to your
+   configured iport with a matching node password.
+3. Confirm the log shows the incoming session completing, and that
+   AmiBinkD returns to listening afterward (it should accept a second
+   test connection without needing to be restarted).
+
+Test multi-network polling:
+
+1. Set up two or more networks per section 07.
+2. Poll them with -P ALL, with multiple -P arguments in one invocation,
+   or chained via driver scripts per section 09.
+3. Confirm every network's session completes -- not just the first one.
+   With -P ALL, check the "ALL: created N poll(s)" summary line first:
+   if N is lower than the number of nodes you expected, the missing
+   ones have no host to call and were skipped (see section 08). If the
+   chain stops after the first network with no further output, see
+   section 09's comment-character warning before assuming a code
+   problem.
+
+Test real mail flow, not just clean session logs:
+
+1. Queue a real test message from another node addressed to you (or
+   from your own system addressed outbound).
+2. Poll (or wait for the server to receive it).
+3. Confirm the .pkt file actually lands in your inbound directory and
+   that your tosser processes it successfully -- a clean-looking BinkP
+   session log does not by itself guarantee the received file was
+   correctly finalized on disk; see section 15, finding 8, for why this
+   distinction mattered on this port specifically.
+
+
+===============================================================================
+12. TROUBLESHOOTING
+===============================================================================
+
+-------------------------------------------------------------------------------
+Problem: getaddrinfo failed / Temporary failure in name resolution
+-------------------------------------------------------------------------------
+
+Check:
+
+* The host:port in your "node" line -- typos are the most common cause
+* Whether DNS is actually reachable from the Amiga/emulator's network
+  stack at all
+* Whether the address in "-P<address>" actually matches a configured
+  "node" line for that domain -- a mismatched/mistyped address (e.g. a
+  transposed digit) means AmiBinkD has no host to resolve at all
+
+
+-------------------------------------------------------------------------------
+Problem: multi-network poll chain stops after the first network
+-------------------------------------------------------------------------------
+
+Check:
+
+* Whether the next script in the chain has a "#"-prefixed comment line
+  instead of ";" -- see section 09
+* The log for that specific network -- did that session actually
+  complete, or hang?
+* Whether the chain is actually failing, versus just being slow (each
+  session runs to completion before the next starts -- see section 05)
+
+
+-------------------------------------------------------------------------------
+Problem: inbound server stops accepting connections after the first one
+-------------------------------------------------------------------------------
+
+This is the class of bug this port fought hardest during development
+(see section 15, findings 1-5). If you're running the exact build this
+manual ships with, it should not recur -- but if you've modified the
+socket/select handling, see section 15 in full before changing it
+further; several of these bugs looked correct at the source level and
+were only caught by live testing.
+
+
+-------------------------------------------------------------------------------
+Problem: "cannot rename ... No error!" in the log
+-------------------------------------------------------------------------------
+
+This was a real bug in early builds of this port (section 15, finding
+8) -- a received file's rename-into-place step reported failure (with a
+misleading "No error" message) even though the rename had actually
+succeeded on disk, leaving the file stuck under a temp name in your
+temp-inbound directory. Fixed as of this release. If you see this
+message on a build newer than the fix, check whether your temp-inbound
+and inbound directories are on the same AmigaDOS volume -- a genuine
+cross-volume rename will still legitimately fail (AmigaDOS's Rename()
+cannot move across volumes) and should be reported with a real, specific
+errno rather than "No error", but a same-volume rename should not fail
+at all on a fixed build.
+
+
+-------------------------------------------------------------------------------
+Problem: received files are missing / "missing tmp file" in the log
+-------------------------------------------------------------------------------
+
+This was a real bug in early builds of this port (section 15's
+PRIuMAX/PRIdMAX note under "what changed" in the technical notes below)
+caused by a format-string size mismatch corrupting the outgoing M_FILE
+protocol message's byte-count/offset fields. Fixed as of this release.
+If this recurs, it is worth checking the build's compiler flags match
+what this port expects (-DHAVE_INTMAX_T in particular) rather than
+assuming it's a fresh instance of the same root cause.
+
+
+-------------------------------------------------------------------------------
+Problem: "error unlinking '...csy': Text file busy" in the log
+-------------------------------------------------------------------------------
+
+Still not root-caused on this port -- see section 16. Usually cosmetic
+(one busy-flag file per node, session still completes normally
+afterward), but as of v10.3 it is confirmed capable of NOT clearing at
+all: an ArakNet lock once stayed stuck for over 3 hours, hanging that
+one poll and, since only one session runs at a time, blocking every
+other configured network from being polled until the whole instance was
+restarted. v10.3 bounds this: after 3 consecutive failed unlink
+attempts for the same node, it backs off (holds that node for 5
+minutes) instead of retrying forever, so a stuck lock can no longer
+block the rest of the night's polling schedule. If the same node keeps
+hitting this repeatedly, that is a signal worth investigating rather
+than ignoring -- check for heavy concurrent file-write activity
+elsewhere on the same drive image around the same time.
+
+
+-------------------------------------------------------------------------------
+Problem: AmiBinkD seems to hang instead of exiting (v10.5+)
+-------------------------------------------------------------------------------
+
+Expected behaviour, not a bug, if a session is genuinely still active
+(check the log for a session that never logged "done"/"session closed").
+Since v10.5 (real concurrent sessions), shutdown deliberately waits
+indefinitely for every in-flight session to finish rather than timing
+out and exiting anyway -- see section 05's "Known, Accepted Limitations"
+for why. You'll see a periodic "still waiting for N session(s) to
+finish" log line (every ~10 seconds) rather than silence, so a wedged
+shutdown is distinguishable from a genuinely frozen process. If a
+session really is stuck (e.g. a remote that stopped responding
+mid-transfer with no timeout ever tripping), the same recovery already
+used for other stuck-process situations on this BBS applies: end the
+whole Amiberry instance and relaunch it, same as recovering from any
+other wedged Amiga-side process.
+
+v10.8 and v10.10 both attempted a fix here (bounding connect() itself
+with connect-timeout) and both failed live -- the real cause turned out
+to be unrelated to timeouts entirely: outbound connect() runs in a
+spawned child process that isn't the one that opened bsdsocket.library,
+and a blocking connect()'s internal completion notification only
+reaches whichever Process the library currently considers "the caller."
+Fixed properly in v10.12 by giving each outbound-connecting child its
+own private, unshared bsdsocket.library instance -- see v10.12's
+changelog entry and section 05. connect-timeout still has no effect on
+AMIGA (connect() is a plain blocking call again), but as of v10.12 that
+should no longer matter in practice, since the connection itself should
+now complete (or fail) within about a second, matching what a live
+packet capture already proved the underlying TCP handshake does. If a
+poll still hangs after "trying <host> [<ip>]..." under v10.12 or later,
+that's a genuinely new, unexplained problem worth investigating fresh,
+not a recurrence of this one.
+
+A second cause, one step earlier, was originally worked around in v10.9
+with a host-side DNS cache (a poll could hang inside hostname resolution
+itself, before connect() was ever reached) and later confirmed fixed for
+real by v10.12's private-bsdsocket.library-per-child fix -- see v10.9,
+v10.13, and v10.14's changelog entries. As of v10.14 hostname resolution
+is a plain gethostbyname() call again, no cache file or host-side script
+involved. If a poll hangs with the log never even showing "trying <host>
+[<ip>]...", that means hostname resolution itself is hanging again --
+treat this as a serious regression and worth investigating fresh (check
+first whether v10.12's private-SocketBase fix, client.c's call(), is
+still intact) rather than assuming it's this same historical issue
+recurring on its own.
+
+
+-------------------------------------------------------------------------------
+Problem: session works from Shell but not from a scheduled event
+-------------------------------------------------------------------------------
+
+Check:
+
+* Current directory / assigns available to the scheduled context
+* Whether paths in the config are absolute rather than relying on a
+  CD that only happens when run interactively
+* Permissions on the config file, log directory, and outbound/inbound
+  directories
+
+
+===============================================================================
+13. BEST PRACTICES
+===============================================================================
+
+* Test one node/network at a time before adding it to a scheduled chain
+* Use real, distinct passwords per node -- don't reuse one password
+  across every hub out of convenience
+* Keep send-if-pwd enabled unless you specifically want to send mail to
+  unauthenticated sessions
+* Review logs regularly, especially after adding a new network
+* Keep backups of your working config before editing it
+* Test inbound (server mode) separately from outbound (poll mode) --
+  they exercise different code paths
+* If chaining multiple networks via driver scripts, test the full chain
+  after adding or editing any one script -- a single bad line can abort
+  the whole chain (see section 09)
+* Don't enable backresolv unless you specifically want reverse-DNS
+  hostnames in the log and understand the private-IP hang risk (section
+  15, finding 6)
+
+
+===============================================================================
+14. SECURITY NOTES
+===============================================================================
+
+AmiBinkD accepts inbound TCP connections from the internet (or your
+local network) and writes files to disk based on what the remote side
+sends.
+
+Recommended precautions:
+
+* Set a real, per-node password for every configured node
+* Use send-if-pwd so unauthenticated sessions can only receive from you,
+  not pull your queued mail
+* Don't point inbound/temp-inbound at directories your BBS or OS treats
+  as auto-executed or otherwise sensitive
+* Keep your config file's passwords out of anything you publish --
+  amibinkd-example.cfg ships with placeholders only, on purpose
+* Review logs regularly for unexpected connection attempts
+* Keep backups
+
+
+===============================================================================
+15. REAL-HARDWARE FINDINGS (AMIBERRY BSDSOCKET_EMU)
+===============================================================================
+
+Every finding below compiled and linked fine, and looked correct from
+the header/API surface alone -- each was only caught by actually running
+this port live on real Amiberry. These are documented here because they
+affect runtime *behavior*, not just this port's own source code -- if
+you're maintaining or extending AmiBinkD (or writing other native
+AmigaOS networking code against bsdsocket.library/bsdsocket_emu), check
+this list before assuming unexpected behavior is a bug in your own code.
+
+1. getaddrinfo()/getnameinfo() are not actually implemented by
+   Amiberry's bsdsocket_emu, despite being declared as real
+   bsdsocket.library vector calls. Calling them caused an immediate
+   wild-jump crash. Worked around by using the classic
+   gethostbyname()-based resolution path instead, never the "real"
+   vector call.
+
+2. ioctl(FIONBIO) / fcntl(O_NONBLOCK) do not work on bsdsocket socket
+   descriptors -- they're AmigaDOS file-handle calls, and bsdsocket
+   sockets aren't AmigaDOS file handles without ixemul's translation
+   layer. They fail silently ("No such file or directory"), meaning a
+   socket you thought you'd made non-blocking is still blocking.
+   IoctlSocket() is bsdsocket.library's real equivalent -- use that
+   instead.
+
+3. A select()-ready listening socket's accept() is not guaranteed
+   non-blocking, unlike real BSD sockets. accept() can block forever
+   immediately after select() just reported that exact socket as ready,
+   with no error and no crash -- just silence. Explicitly set the
+   listening socket itself non-blocking (not just accepted session
+   sockets), and treat EWOULDBLOCK/EAGAIN from accept() as a normal
+   retry rather than a fatal error.
+
+4. WaitSelect()'s "signals" parameter (for waking on Exec signals like
+   SIGBREAKF_CTRL_C in addition to socket activity) does not work --
+   passing it makes no observable difference; Ctrl-C can't interrupt a
+   blocked select() call this way.
+
+5. Calling WaitSelect() too rapidly breaks it. A tight polling loop
+   (checking for Ctrl-C between short-timeout calls) eventually made
+   WaitSelect() start returning -1 with errno left at 0 -- no real error
+   condition, just a stuck function. When the caller already has a
+   bounded timeout (the normal case), make exactly one WaitSelect() call
+   per wait, matching normal call frequency, and check for Ctrl-C once
+   afterward via SetSignal(0, mask) rather than polling in a loop. Only
+   poll (in ~1 second steps) for the rarer case of wanting to block
+   indefinitely.
+
+6. Reverse DNS (backresolv) on a private/non-routable IP can hang an
+   entire session. Not really an Amiberry-specific bug, but a real trap
+   given this port's synchronous, one-session-at-a-time model (section
+   05): an inbound connection from a LAN address triggers a synchronous
+   reverse lookup that may never resolve, blocking everything (not just
+   that session) until the remote side's own protocol timeout gives up
+   first. backresolv only affects log cosmetics -- fine to leave
+   disabled.
+
+7. n_clients (a counter gating whether the client-mode poll loop is
+   allowed to move on to the next queued node) was never decremented
+   for the AMIGA build target in early builds of this port -- only for
+   platforms with real threads or a DOS/DEBUGCHILD build. Invisible when
+   polling a single address (nothing left to decrement for); polling
+   more than one node in one invocation, or chaining several polls from
+   a driver script, hung right after the first session's own "session
+   closed, quitting..." log line, because the stale non-zero counter
+   stopped the poll loop from ever re-evaluating the queue. Fixed in
+   this release.
+
+8. o_rename() (this port's AmigaOS Rename() wrapper, used to finalize a
+   received file from its temp name to its real name) had its
+   success/failure return value backwards in early builds of this port,
+   and never set errno on the real failure path -- a bug in this port's
+   own new code, not a bsdsocket_emu divergence, but just as invisible
+   without live testing. AmigaDOS's Rename() returns *nonzero* on
+   success (the standard AmigaDOS BOOL convention, same as Lock()/
+   CreateDir()/DeleteFile()) -- the wrapper reported that as a POSIX
+   failure and a real failure as POSIX success, inverted, with no
+   errno set either way. The result: a rename that had already
+   succeeded on disk got logged and treated as failed, silently
+   orphaning received files under their temp names. Fixed in this
+   release by inverting the return mapping and translating IoErr() to a
+   real errno.
+
+
+===============================================================================
+16. KNOWN LIMITATIONS / NOT DONE YET
+===============================================================================
+
+* No zlib/bzip2 compression support (matches the historical Amiga binkd
+  build, which also shipped without them).
+* No DNS SRV-record lookup support (this toolchain lacks the resolver
+  header it needs; the plain getaddrinfo()-based fallback covers every
+  caller in practice).
+* The piped external-transport feature (run3(), used by exactly one
+  binkd feature) is stubbed to fail cleanly rather than implemented --
+  not part of the core BinkP/FTN path.
+* mypid and rand()'s internal state are shared globals across
+  concurrently-running sessions (v10.5) rather than per-session -- see
+  section 05's "Known, Accepted Limitations" for why this is low-risk
+  in practice and not fixed this release. errno's exposure at the
+  getpeername()/getsockname() critical section was fixed in v10.7; it
+  remains a shared global at every other TCPERR()/TCPERRNO call site
+  (client.c's outbound connect()/socket()/bind(), server.c's servmgr
+  setup, iptools.c's ioctl paths) -- unconfirmed as an active problem
+  there, but the same latent race in principle.
+* backresolv (reverse/PTR lookups, getnameinfo()'s gethostbyaddr() call)
+  is still disabled in all deployed configs, left that way as a
+  precaution -- it uses the exact same class of bsdsocket.library call
+  (from the same spawned, non-opener children) that v10.9's DNS hang and
+  v10.12's connect() hang both turned out to share, and v10.12/v10.14
+  together strongly suggest it would work fine now too, but this
+  specific call path (reverse lookups on inbound sessions, including the
+  long-lived persistent server) hasn't actually been re-tested live the
+  way outbound gethostbyname() was in v10.13. Re-enabling it and
+  watching a day's inbound traffic would be the natural next check if
+  someone wants nicer hostnames in the log.
+* bsdsocket_emu's UDP-socket support is now confirmed broken/unreliable
+  on this Amiberry setup (v10.9 investigation) -- untested whether this
+  affects anything else this port might someday want to use UDP for (it
+  doesn't affect anything today; binkp itself is TCP-only), but worth
+  keeping in mind before ever reaching for a UDP-based feature on this
+  platform again.
+* RESOLVED in v10.12, keeping this entry as a record of what looked
+  right but wasn't: v10.8 and v10.10 both assumed the underlying problem
+  was "how to detect connect() completion" (non-blocking + select(),
+  then non-blocking + a re-issue-connect() poll loop) and both failed
+  identically live against a real remote. The actual cause turned out to
+  be nothing to do with blocking vs. non-blocking at all: outbound
+  connect() runs in a branch()-spawned child that isn't the Process
+  that opened bsdsocket.library, and a blocking connect()'s internal
+  completion notification only reaches whichever Process the library
+  currently associates as the caller. v10.12 gives each outbound child
+  its own private, unshared bsdsocket.library instance instead, which
+  sidesteps the whole per-Process-notification question. connect-timeout
+  is a plain blocking call again as of v10.12 (no non-blocking machinery
+  in client.c at all) and has no effect on AMIGA, same as v10.11 - not
+  because it's broken, but because it was never the actual bottleneck.
+* Soak testing to date covers one unattended overnight run (~7 hours,
+  30-minute poll interval) across seven networks, under the old
+  synchronous v10.4 model -- solid evidence against regressions in the
+  bugs fixed through that release, but v10.5/v10.6/v10.7's concurrency has not
+  yet had the same multi-day/high-volume soak treatment, and
+  specifically has not yet been soak-tested with genuinely overlapping
+  sessions (e.g. two networks polling at once) rather than just
+  back-to-back ones -- see section 05.
+
+
+===============================================================================
+17. DIFFERENCES FROM STOCK UPSTREAM BINKD
+===============================================================================
+
+* Runs each BinkP session as a real AmigaOS process via
+  CreateNewProcTags() rather than fork()/pthreads (neither exists on
+  classic AmigaOS without ixemul.library) -- see section 05. Through
+  v10.4 this build ran every session synchronously, one at a time;
+  v10.5 added genuine concurrency.
+* "-P ALL" is an addition, not an upstream feature: stock binkd's -P
+  takes one FTN address per switch and has no way to say "every node in
+  the config" (see sections 07 and 08). Any other value of -P behaves
+  exactly as upstream, and "ALL" cannot collide with a real address
+  since it isn't a valid Fido-style one.
+* No ixemul.library/ixnet.library dependency at all -- the historical
+  Amiga build of binkd required ixemul.library 47.0+; this port doesn't
+  link against it or call any of its functions.
+* Talks to bsdsocket.library directly via a small glue layer, rather
+  than through ixemul's socket-emulation layer.
+* getaddrinfo()/getnameinfo() always use the classic gethostbyname()-
+  based emulation path on this build target, never bsdsocket.library's
+  own (non-functional, on Amiberry) vector calls for those names -- see
+  section 15, finding 1.
+* No zlib/bzip2 compression and no DNS SRV-record lookups -- see section
+  16.
+* The piped external-transport feature (run3()) is stubbed rather than
+  implemented -- see section 16.
+* No double-precision floating point is used anywhere in this build; the
+  handful of places stock binkd uses "double" (a live transfer-
+  percentage counter, post-transfer CPS figures in log lines) were
+  rewritten as integer/fixed-point math, because this toolchain's
+  libgcc is missing the soft-float routines those would have needed. No
+  user-visible behavior difference -- the same percentages and CPS
+  figures are logged, just computed without floating point.
+
+Everything else -- the BinkP protocol itself, FTN packet/outbound-flow
+file handling, config file format and keyword semantics, and CRAM-MD5
+authentication -- is unchanged from upstream binkd.
+
+
+===============================================================================
+18. VERSION HISTORY
+===============================================================================
+
+v10.25 - Log Lines Stop Being Shredded
+--------------------------------------
+
+* Log lines were being torn apart mid-write when two AmiBinkd instances ran
+  at once. A real example:
+
+      + 18 Aug 21:07:52 [1081963032] pwd protected session (MD5)
+      nux/64                      <- fragment of "Linux/64"
+      115                         <- fragment of "binkd/1.1a-115"
+
+  Log() already took a lock, but a PRIVATE one. Upstream binkd is a single
+  process with threads, so a private semaphore covers every writer it has.
+  This port runs the inbound server and each poll as separate program
+  invocations, so two or three instances write the same file with no lock
+  between them.
+
+  Log() now uses an Exec PUBLIC semaphore ("AmiBinkd.log"), which is the
+  AmigaOS mechanism for locking across separate programs.
+
+  NOTE: the fix only holds once EVERY instance is running v10.25. Replacing
+  the binary is not enough on its own -- the long-running inbound server keeps
+  the old code until AmigaOS restarts it, and a v10.24 server will still
+  interleave with a v10.25 poll.
+
+* Removed the "servmgr listen on *:24554" line. The port is already in the
+  config, and the line cost width without adding anything.
+
+* The startup banner now credits the port alongside the original author.
+
+
+v10.24 - Outbound Mail Actually Leaves The System
+-------------------------------------------------
+
+* No outbound mail had ever left this port. Every bundle was sent as 0 bytes
+  while a valid ZIP sat on disk containing the packet, and no layer logged an
+  error because none had one: the tosser packed correctly and AmiBinkd sent
+  exactly the byte count it was given.
+
+  Cause: libnix13's fstat() always reports st_size == 0. It seeks to the
+  start of the file, then measures with SEEK_CUR -- which can only return
+  zero. It should use SEEK_END. fstat() returns success while doing so, so
+  the caller gets a valid-looking struct describing an empty file.
+
+  protocol.c's start_file_transfer() does fopen + fstat + use sb.st_size,
+  identical to upstream binkd. amiga/fstat.c now overrides fstat(),
+  re-measuring with SEEK_END and restoring the caller's file position.
+
+  This affects any -mcrt=nix13 program that relies on file sizes, not just
+  this one.
+
+* SBTC_ERRNOPTR is now set on the shared SocketBase and on every private
+  per-child base. Without it bsdsocket.library never writes to errno, yet
+  iphdr.h defines TCPERR() as strerror(errno) on AMIGA -- so socket errors
+  reported whatever unrelated call last touched errno, usually EACCES from a
+  failed .bsy unlink. Socket errors now name real causes.
+
+* pr_WindowPtr = -1 in main(), and NP_WindowPtr on spawned session Processes,
+  so an AmigaOS "Please insert volume ..." requester can no longer block the
+  mailer waiting for a human.
+
+* Removing one of our own lock files no longer uses a 4-second blocking
+  delete: ten bounded retries (~400ms), then log and move on. Stale-lock
+  cleanup makes one non-blocking attempt. Poll times went ~14s -> 3-5s.
+
+* libnix stdio's global ____filelist is guarded by a semaphore, since
+  sessions are concurrent AmigaOS Processes sharing one address space.
+
+
+v10.18 - Inbound Sessions Stop Hanging
+---------------------------------------------------------------------------
+
+* Upgrade from v10.15, the previous public release. v10.16 and v10.17
+  were never released; they are listed below because they explain the
+  version jump and because the AmigaOS problems they uncovered are worth
+  passing on. Nothing shipped between v10.15 and this release.
+
+* Root cause of the whole v10.16-v10.18 arc was setting a file's
+  datestamp. On AmigaOS that is SetFileDate(), and when another Process
+  holds the object it does not fail -- it never returns. Nothing bounds
+  it and nothing watches the session, so the session is lost along with
+  its server slot, socket and .bsy locks. Accumulate enough and the
+  server reaches "maxservers" and refuses all inbound.
+
+  It only triggers when something else touches the same directories,
+  which is why it presented as a night-time-only fault: on the author's
+  system 66 of 66 inbound commits completed during the day and 7 of 7
+  hung after 21:00, when C-Net/5's own file-catalog jobs run. One hang
+  landed inside a poll client, so the BBS event that started it never
+  finished and outbound mail stopped for seventeen hours.
+
+* Fixed by the new "set-file-dates" setting (section 06), which defaults
+  OFF on this port -- the one place AmiBinkD deliberately differs from
+  every other binkd platform. The cost is cosmetic: received files carry
+  their arrival time rather than the sender's.
+
+* Verified over 18 hours spanning the window that broke v10.17: 89
+  inbound sessions started and 89 closed with nothing leaked, 351 file
+  commits, session count peaking at 5 and returning to zero between
+  polls, 59 of 59 scheduled mail events completing. v10.16 saturated in
+  13 hours; v10.17 had leaked 55 sessions by 26 hours.
+
+v10.17 - One Hung Session No Longer Takes The Others With It (unreleased)
+---------------------------------------------------------------------------
+
+* Never released; superseded by v10.18. Refreshing .bsy datestamps happens on every pass
+  of the protocol main loop, and that work was done while holding a
+  single global lock across file I/O -- so one session blocked in there
+  pinned the lock and every other concurrent session piled up behind it,
+  a pile-up that fed itself. v10.17 removed the cascade; v10.18 removed
+  the hanging call.
+
+v10.16 - Inbound Socket Handoff (unreleased; fix retained in v10.18)
+---------------------------------------------------------------------------
+
+* Never released. Its inbound fix was real and is retained, but on test
+  it traded one failure for another: hung sessions
+  leaked permanently and accumulated until inbound stopped, which in
+  practice was worse than v10.15's quieter failure. 107 of 128 sessions
+  leaked in twelve hours on the author's system, and their .bsy locks
+  stopped the BBS poll script before it could launch the mailer --
+  eleven hours with no outbound mail and only "error: 8" in the event
+  log. That leak is fixed in v10.18 and the socket handoff below is
+  retained. Notes kept because the underlying problem is instructive for
+  anyone porting to AmigaOS.
+
+* Applies to any mailer, not just this one: if your event script deletes
+  .bsy/.csy before polling, a failed delete must not abort the script. On
+  AmigaDOS use "FAILAT 21" before those deletes and "FAILAT 10" after. A
+  lock held by a running session will otherwise kill the whole event.
+  "kill-old-bsy" (section 06) already sweeps stale locks.
+
+* The original v10.16 notes follow, for reference only:
+
+* Inbound BinkP sessions never worked in any release from v10.5 through
+  v10.15.
+
+  What you would have seen: the log records
+
+      + <date> incoming session with <peer>
+
+  and then nothing more for that session -- no error, no timeout, no
+  close -- while the calling system reports "Session timeout" and
+  "Authorization failed". Because the stuck session never released its
+  server slot, the next caller was refused outright, so inbound mail
+  stopped within a few minutes of every startup and a restart looked
+  like it helped. Outbound polling was entirely unaffected, so mail you
+  collected yourself still arrived normally, which made the fault easy
+  to attribute to the remote system rather than to AmiBinkD.
+
+  Cause: on AmigaOS each Process gets its own bsdsocket.library context,
+  and socket readiness is delivered by signal to the Process the library
+  regards as the caller. Since v10.5 each session runs as its own
+  Process (section 05), but inbound sessions kept using the parent's
+  shared library base for a socket they did not own, so those readiness
+  signals never reached them. The session could therefore neither send
+  nor receive -- it had queued its greeting but never put a byte on the
+  wire -- and simply waited forever. v10.12 fixed this same class of
+  problem for outbound connections; inbound was left uncovered.
+
+  AmiBinkD now transfers the accepted socket into the session's own
+  private library base using ReleaseSocket()/ObtainSocket(), which is
+  bsdsocket.library's documented mechanism for passing a socket between
+  Processes. See section 15 if you maintain this on another TCP/IP
+  stack -- the transfer is standard and not Amiberry-specific.
+
+* Also fixed by the same change: the "timeout" keyword (section 06) had
+  no effect on stalled inbound sessions, which could linger for tens of
+  minutes. That timeout is driven by the same socket-readiness loop, so
+  it now works as documented. No configuration change is required.
+
+* Note: do not set "maxservers" as a workaround for the old symptom. On
+  this port a rejection can take the server manager down with it,
+  stopping inbound entirely. Leave it unset (default 100).
+
+* Verified live: five consecutive inbound sessions from a network hub in
+  44 seconds -- full handshake, CRAM-MD5 authentication, packets
+  received into the inbound directory, clean teardown each time, and the
+  listener still accepting afterwards. Outbound polling unchanged over
+  the same period.
+
+v10.15 - Poll Every Network From One Config ("-P ALL"), Custom Icon
+---------------------------------------------------------------------------
+
+* New: "-P ALL" polls every node in the config in a single invocation
+  (sections 07, 08 and 09):
+
+    AmiBinkD:AmiBinkD -p -PALL AmiBinkD:AmiBinkD.cfg
+
+  Stock binkd's -P takes one FTN address per switch, which left two
+  ways to carry several networks: repeat -P once per uplink, or keep a
+  separate config and driver script for each. The second is what this
+  port's own deployment did -- seven networks meant seven .cfg files
+  and seven .scr files to keep in step, and every config-wide change
+  had to be made seven times. "-P ALL" removes that: one config, one
+  command line. The inbound server ("-s") already used the combined
+  config, so the client side now uses the same single file.
+* "ALL" is matched case-insensitively and accepted in either form
+  ("-PALL" or "-P ALL"). It cannot collide with a real -P argument,
+  since it isn't a valid Fido-style address -- before this release the
+  same command line simply logged "`ALL' cannot be parsed as a
+  Fido-style address" and polled nothing.
+* Two kinds of node are deliberately skipped rather than polled: nodes
+  with no host to call (hosts unset or "-"), because the queue would
+  never act on such a poll and the outbound would just accumulate
+  orphan .dlo files; and your own addresses, in case one is also listed
+  as a node line. Each skip is logged at loglevel 4 and counted in the
+  loglevel-3 summary ("ALL: created 5 poll(s), skipped 2 node(s) with
+  no host").
+* Implementation note for anyone reading the source: poll_all_nodes()
+  in ftnnode.c, dispatched from binkd.c's poll-creation loop, walks the
+  node array with the existing foreach_node() and calls the same
+  create_poll() that a normal -P does. It is the same per-node work as
+  poll_node(), minus the address parsing -- not a separate polling path
+  with its own behavior.
+* Worth setting alongside this: "maxclients" (and "call-delay") now
+  actually decide something. With every uplink pollable in one run,
+  the default maxclients of 100 means every network is called
+  simultaneously, where the per-script pattern was strictly one at a
+  time. See section 06; this BBS's own config uses maxclients 2 with
+  call-delay 5.
+* Confirmed live on the deployment this port is developed against:
+  a scheduled poll cycle logged "ALL: created 7 poll(s)" and completed
+  clean sessions with all seven networks, two at a time, including real
+  inbound file reception.
+
+Also in this release -- the packaging work 10.15 was first numbered for:
+
+* Replaced DH4:AmiBinkD/AmiBinkD.info, previously a reused copy of the
+  RoFTIC icon (byte-identical, same file), with a purpose-made one: the
+  Reign of Fire dragon-head badge cropped to just its circular emblem,
+  quantized to a 64-colour palette-mapped image, and alpha-masked to a
+  circle so it sits cleanly on the Workbench desktop instead of
+  carrying a black square background. A distinct, brighter/hotter
+  "selected" image is shown while the icon is clicked, instead of
+  whatever the reused RoFTIC icon's own selected state happened to be.
+* Built via icon.library's own V44+ API (NewDiskObject/IconControlA/
+  PutIconTagList) rather than a hand-rolled on-disk format - reverse
+  engineering the existing icon's on-disk FORM ICON encoding (a real
+  compressed IFF FACE/IMAG structure, confirmed by walking the chunks
+  of the reused RoFTIC icon and the AmigaOS 3.2 NDK's icon.doc/icon.h)
+  turned out to be unnecessary and risky to hand-roll correctly; letting
+  the OS's own code write the file sidesteps that entirely. The tooling
+  lives in ~/AmiBinkD-icon-tool/: gen_icon_data.py crops/quantizes the
+  source artwork into icon_data.h (palette + chunky pixel arrays for
+  both the normal and selected states, circular alpha mask baked in),
+  and buildicon.c (cross-compiled with the same amiga-gcc toolchain as
+  AmiBinkD itself, using the newer NDK headers since icon.library V44
+  needs AmigaOS 3.5+) calls the real icon.library API to write
+  AmiBinkD.info. Re-run both any time the source artwork changes.
+* Requires AmigaOS 3.5+ (icon.library V44 or later) to render the
+  colour image - matches this system, which is already running AmigaOS
+  3.2. Older Workbench versions fall back to whatever default/generic
+  icon they'd show for a WBTOOL with no readable colour extension.
+* The icon work alone was briefly released as a packaging-only 10.15
+  with the v10.14 binary. "-P ALL" landed the following morning and was
+  folded into the same version number rather than becoming 10.16,
+  specifically so 10.15 doesn't sit in this history as a version nobody
+  can point at a feature for. If you have an AmiBinkD10_15 archive
+  whose binary reports v10.14 at startup, that is the short-lived
+  earlier cut -- replace it with this one.
+
+v10.14 - DNS Cache Mechanism Removed For Good
+---------------------------------------------------------------------------
+
+* v10.13's experiment (see that changelog entry) is confirmed: 2 full
+  days, 2 reboots, ~60 poll cycles per network across all 7 networks,
+  zero recurring failures (one isolated, non-reproducing blip on one
+  boot, never seen again on the second reboot or since). gethostbyname()
+  genuinely works now, including on the original problem hub
+  (AmigaNet) - v10.12's private-bsdsocket.library-per-outbound-child fix
+  fixed this hang too, as a side effect, exactly as suspected.
+* Removed the v10.9 host-side DNS cache mechanism entirely: the
+  cache-lookup function is gone from rfc2553.c (getaddrinfo() just
+  calls gethostbyname() directly again, same as every other platform
+  this codebase supports, with the numeric-address short-circuit kept -
+  it's a legitimate optimization on its own), the
+  ~/amibinkd-dns/refresh.py script and its systemd --user timer/service
+  are deleted, and the stale DH0:AmiBinkd/dns_cache.txt file is removed.
+  Don't reintroduce this class of workaround without new evidence
+  gethostbyname() is broken again - and check whether v10.12's
+  private-SocketBase fix is still in place first if it ever does
+  resurface, since that's what actually fixed the root cause.
+* This also clears the blocker on refreshing the DH4:AmiBinkD/
+  redistributable package (see v10.9's changelog entry and manual.txt's
+  earlier notes on this) - the package no longer depends on any
+  Reign-of-Fire-specific host-side infrastructure to resolve hostnames.
+  The package refresh itself is a separate, not-yet-done task.
+* Deployed to DH0:AmiBinkd/AmiBinkd (v10.13 kept as
+  AmiBinkd.v10.13-backup).
+
+v10.13 - EXPERIMENTAL: Testing Whether The DNS Cache Is Still Needed
+---------------------------------------------------------------------------
+
+* v10.9's cache-only DNS lookup (see that changelog entry) was built to
+  work around gethostbyname() hanging on this bsdsocket_emu - but at the
+  time, the *why* wasn't understood, only that it hung. v10.12 later
+  found the real cause: spawned outbound children never received
+  connect()-completion notifications because they weren't the Process
+  that opened bsdsocket.library, fixed by giving each one its own
+  private library instance - confirmed live across all 7 networks plus
+  a clean overnight soak (14/14 poll cycles, zero failures).
+* gethostbyname() is the same class of bsdsocket.library call, from the
+  same spawned children, as the connect() calls v10.12 fixed. Plausible
+  v10.12 fixed this hang too, as a side effect - which would make the
+  whole host-side DNS cache script (~/amibinkd-dns/refresh.py + its
+  systemd timer, external to this package, never shipped with it)
+  unnecessary. That mechanism was also this port's biggest problem for
+  redistribution: anyone downloading the package without replicating
+  Reign of Fire's own host-side infrastructure would get permanent,
+  silent DNS failures on any hostname-based node line.
+* Testing directly: getaddrinfo() (AMIGA build) now calls gethostbyname()
+  again for non-numeric hostnames - the numeric-address short-circuit
+  added in v10.9 stays (still correct regardless of which path handles
+  the non-numeric case). The systemd timer is stopped and disabled; the
+  cache-lookup function stays defined in rfc2553.c but unused, for a
+  fast revert if needed. Running this against a full day of real
+  scheduled traffic across all 7 networks to see whether it holds.
+* If this holds: the cache mechanism and its host-side script can be
+  removed for good in a future release, and the redistributable package
+  refresh (paused as of v10.12 specifically because of this gap) can
+  resume. If gethostbyname() hangs again: revert to
+  amiga_dns_cache_lookup() and re-enable the systemd timer - don't reach
+  for a third mechanism first.
+
+v10.12 - Real Fix: Private bsdsocket.library Base Per Outbound Session
+---------------------------------------------------------------------------
+
+* v10.11's revert turned out not to fix the underlying bug, and a live
+  packet capture finally proved why. Captured an actual poll attempt at
+  the wire level: TCP handshake completes in well under a second every
+  time, the remote's BinkP handshake data (227 bytes) arrives fully ACKed
+  at the kernel level within another second - and AmiBinkD's own process
+  still never logs "connected," never reads the data, and does nothing
+  until externally interrupted. Also discovered this was never specific
+  to one hub: the user confirmed every configured network hung the same
+  way, and a different AmigaOS FTN mailer on the same machine (FidoBlitz)
+  connects and polls successfully with no issue.
+* Root cause: since v10.5, every outbound connection attempt runs inside
+  a spawned CreateNewProcTags child (client.c's do_client() ->
+  branch(call, ...)) - a different Process from the one that actually
+  opened bsdsocket.library (amiga_glue.c's amiga_socket_init(), called
+  once in the top-level process). That function's own v10.5-era comment
+  already documented the relevant SBTC_CAN_SHARE_LIBRARY_BASES tradeoff
+  ("SBTC_SIGIOMASK-style per-Process signal delivery only works for
+  whichever Process last configured it") but reasoned only about
+  select() (already bounded-polling here, not signal-wait). What that
+  reasoning missed: a *blocking* connect() call's own internal
+  completion notification likely depends on this exact same per-Process
+  delivery mechanism (libraries/bsdsocket.h documents real
+  SBTC_BREAKMASK/SIGIOMASK/SIGURGMASK/SIGEVENTMASK Task-notification
+  tags) - so the wakeup for a spawned, non-opener child's connect()
+  never arrives, regardless of blocking, non-blocking+select() (v10.8),
+  or non-blocking+poll (v10.10) - all three fail the same way because
+  none of them change *which Process gets notified*. This also explains
+  why inbound sessions (server.c's spawned children) work fine: their
+  whole I/O path uses non-blocking sockets + bounded select(), which
+  never depended on this notification mechanism in the first place -
+  connect() was the one remaining blocking, library-internal call in a
+  non-opener child.
+* Fixed by giving each outbound-connecting child its own private,
+  unshared bsdsocket.library instance for its whole session lifetime -
+  matching how FidoBlitz and pre-v10.5 AmiBinkD both worked - without
+  touching the shared SocketBase every other concurrently-running
+  Process (top-level clientmgr/servmgr, inbound session children) still
+  depends on. Mechanism: bsdsocket.library's ~40 call-site macros
+  (socket(), connect(), send(), select(), gethostbyname(), etc.) all
+  resolve their library base through one macro, BSDSOCKET_BASE_NAME.
+  Redefining it to a function call instead of a bare global -
+  amiga_current_socketbase(), which returns the calling Task's own
+  private base (stashed in tc_UserData) if it has one, or falls back to
+  the existing shared SocketBase otherwise - gives every call site
+  correct, per-Task resolution automatically, with no changes needed at
+  any individual call site anywhere in the codebase. client.c's call()
+  (the whole branch()-spawned entry point, not just the connect() line)
+  now opens a private base via amiga_open_private_socketbase() at entry
+  and closes it via amiga_close_private_socketbase() before returning;
+  degrades to the shared base (today's still-broken behaviour) rather
+  than aborting the poll if the open fails.
+* Required a companion fix in branch.c: amiga_proc_trampoline() freed
+  its transient argument-handoff struct but never reset tc_UserData
+  afterward, leaving every freshly spawned child (not just outbound
+  ones) with a dangling pointer where the new per-Task lookup needed a
+  safe NULL default. Now explicitly reset to NULL right after the free.
+* Deployed to DH0:AmiBinkd/AmiBinkd (v10.11 kept as
+  AmiBinkd.v10.11-backup). CONFIRMED LIVE the same day: a poll to
+  39:902/0@amiganet logged "connected" 1 second after "trying ...",
+  then completed a full session and closed cleanly -
+  "done (to 39:902/0@amiganet, OK, S/R: 0/2 (0/7773 bytes))" -
+  the first successful poll to this hub across the entire v10.8-v10.12
+  investigation. This is the real fix.
+
+v10.11 - Reverted To Plain Blocking connect() On AMIGA
+---------------------------------------------------------------------------
+
+* v10.10 shipped believing it had fixed connect()-completion detection
+  by replacing select()/WaitSelect() with a re-issue-connect() poll
+  loop. It hadn't. The very next real test against
+  hub.bottomlessabyss.net hung exactly the same way v10.8's original
+  code did: a connection that had genuinely completed at the TCP level
+  (host-side socket state showed CLOSE-WAIT with the remote's reply
+  already sitting unread) was never recognized as connected.
+* This ruled out the v10.10 diagnosis. v10.10's timeout bound was a
+  plain local counter, not dependent on select()/WaitSelect() or the
+  emulator's cooperation in any way - and it still never fired. The
+  only way that's possible is if the individual connect() calls inside
+  the poll loop were themselves blocking for extended periods, despite
+  IoctlSocket(FIONBIO) reporting success beforehand. Conclusion:
+  non-blocking connect() itself doesn't reliably work on this
+  bsdsocket_emu - not just one particular technique for polling its
+  completion (select(), and now repeated connect() calls, have both
+  failed identically).
+* Also worth naming plainly: it's possible a standalone "connect() to
+  an unresponsive remote hangs forever" bug never actually existed on
+  its own here. The live incident that originally motivated v10.8 was
+  against this exact node, and v10.9 later showed this same node's
+  hang was actually inside hostname resolution the whole time - so
+  v10.8 may have been solving a problem this port never separately had.
+* Reverted to plain blocking connect() on AMIGA - removed all of
+  v10.8's and v10.10's non-blocking-socket machinery from client.c,
+  back to the same fully-synchronous call this port used successfully
+  for months before v10.8 ever touched this file. A genuinely
+  unresponsive remote is now bounded only by the host's own underlying
+  TCP stack timeout (real and finite, just not configurable from
+  AmiBinkD's side anymore) rather than anything AMIGA-specific.
+* connect-timeout has no effect on AMIGA as of this release. Left set
+  in all 8 deployed .cfg files as a harmless no-op rather than removed,
+  in case a future toolchain/emulator fix makes it meaningful again.
+* Not yet confirmed against a real successful connection to
+  hub.bottomlessabyss.net - this is now the fourth attempt at this
+  specific bug across v10.8/v10.9/v10.10/v10.11. Watch the next
+  scheduled amiganet poll.
+
+v10.10 - Connect-Completion Detection Fixed (No More select() For This)
+---------------------------------------------------------------------------
+
+* v10.8's connect-timeout fix used select()/WaitSelect() to detect when
+  a non-blocking connect() finished. This is the first release where
+  that code got exercised against a real, reachable remote (every
+  earlier attempt in this whole investigation got blocked by hostname
+  resolution first - see v10.9) - and it hung. Confirmed live: a real
+  connection to a hub completed at the TCP level (host-side socket
+  state showed CLOSE-WAIT with unread data in the receive buffer - the
+  remote had already replied and hung up) but the select() call in
+  client.c never returned, hanging the process well past
+  connect-timeout with no "connected" or failure line ever logged.
+* Same underlying platform limitation as v10.9's UDP finding, a
+  different symptom of it: "check writability on a socket that's still
+  connecting" is a far less exercised use of WaitSelect() on
+  bsdsocket_emu than "check writability on an already-established,
+  data-ready socket," which is the only case this whole project has
+  actually soak-tested for months (every send()/recv() timeout in
+  protocol.c's main loop uses the latter).
+* Fixed by not using select()/WaitSelect() for this at all: poll by
+  re-issuing connect() on the same non-blocking socket roughly once a
+  second (EALREADY = still pending, EISCONN or a 0 return = succeeded,
+  anything else = a real failure) via Delay() - the same polling
+  primitive amiga/sem.c's _WaitSem() already uses successfully
+  elsewhere in this port. The timeout bound comes from AmiBinkD's own
+  counter, not from trusting the emulator to honor a select() timeout -
+  so even if this specific fix's own assumptions turn out imperfect,
+  it still fails safe (bounded, not an indefinite hang).
+* Deployed to DH0:AmiBinkd/AmiBinkd (v10.9 kept as
+  AmiBinkd.v10.9-backup). Not yet confirmed against a real successful
+  connection to hub.bottomlessabyss.net specifically (the case that
+  exposed this) - watch for a clean "connected" line on the next
+  scheduled amiganet poll.
+
+v10.9 - Host-Resolved DNS Cache (gethostbyname() Never Called On AMIGA)
+---------------------------------------------------------------------------
+
+* v10.8 fixed connect() having no timeout on AMIGA, but a separate,
+  more severe hang remained: polling a hostname-configured hub could
+  hang forever *before* connect() was ever reached - inside hostname
+  resolution itself. Confirmed live: a poll to a real, reachable hub
+  (resolvable instantly from the host machine) sat wedged for 20+
+  minutes with zero log output, never even reaching the "trying host
+  [ip]..." line that's logged right before connect().
+* Root cause: gethostbyname()/gethostbyaddr() (real bsdsocket.library
+  calls behind rfc2553.c's getaddrinfo()/getnameinfo() emulation) are
+  synchronous, non-cancellable, and non-reentrant (hence the existing
+  resolvsem guard around every call). Two seemingly-safer fixes were
+  investigated and empirically ruled out, not just reasoned away:
+  - Spawn a helper process, abandon it on timeout: the helper still
+    needs the same shared resolvsem. If the lookup itself is what's
+    stuck, walking away leaves that lock permanently held, poisoning
+    DNS resolution for the *entire* running instance, not just one
+    poll - worse than the original bug.
+  - A hand-built DNS-over-UDP resolver (raw non-blocking socket +
+    select(), same pattern as v10.8's connect-timeout fix): a
+    standalone test program doing nothing but this was built,
+    deployed, and run live. It hung twice - once on an aged instance,
+    once immediately after a full guest reboot - with zero output
+    before the hang, meaning it froze inside OpenLibrary()/
+    socket(SOCK_DGRAM) itself, before any network I/O at all. This
+    means Amiberry's bsdsocket_emu doesn't reliably support UDP
+    sockets, which is very likely the same root cause behind
+    gethostbyname()'s own hang (real DNS resolution needs UDP under
+    the hood) - both AMIGA-side "fix it with sockets" approaches were
+    dead ends on this specific emulator.
+* Fixed by moving resolution off the Amiga side entirely. A new
+  host-side script (~/amibinkd-dns/refresh.py, run every 15 minutes
+  via a systemd --user timer) parses all deployed .cfg files for
+  configured hub hostnames, resolves each one using the host's own
+  working resolver, and writes the results to a flat cache file,
+  DH0:AmiBinkd/dns_cache.txt - visible to the Amiga guest instantly,
+  since Amiberry's HardDrives are host directories with no translation
+  layer. rfc2553.c's getaddrinfo() (AMIGA build) now checks for a
+  numeric address first (inet_addr() - pure local string parsing, zero
+  network I/O, unaffected by either hang above), then looks up the
+  cache file via plain fopen()/fgets() (the same file I/O this whole
+  codebase already relies on everywhere), and NEVER calls
+  gethostbyname() under any circumstance. A cache miss (hostname not
+  yet resolved, or the file missing) fails cleanly and immediately
+  (EAI_NONAME -> the existing bad_try()/retry handling in client.c,
+  unchanged) rather than ever hanging.
+* A real regression was caught and fixed during design review before
+  this shipped: getaddrinfo() is also called elsewhere in this
+  codebase with an already-numeric IP string (AI_NUMERICHOST) to turn
+  a peer's known address into a sockaddr, on every single session,
+  inbound and outbound. A cache-only replacement without the numeric
+  short-circuit would have broken that on every connection, since a
+  literal IP string would never appear in the hostname cache. The
+  numeric-address check above (checked first, before the cache) covers
+  this correctly.
+* backresolv (reverse/PTR lookups via getnameinfo()'s gethostbyaddr()
+  call) is NOT covered by this fix and remains disabled, same as the
+  v10.6-era stopgap - it uses the same broken gethostbyname()/
+  bsdsocket_emu path, and since it's cosmetic-only (nicer hostnames in
+  the log, nothing functional depends on it), it wasn't judged worth
+  the same host-side-cache treatment. See "Known Limitations".
+
+v10.8 - Outbound connect() Timeout (connect-timeout Now Works On AMIGA)
+---------------------------------------------------------------------------
+
+* Stock binkd already has a connect-timeout config keyword, implemented
+  via alarm()/SIGALRM to interrupt a blocking connect() call -- but that
+  mechanism is gated to HAVE_FORK-without-HAVE_THREADS builds, and
+  classic AmigaOS has neither fork() nor alarm()/SIGALRM. AMIGA's
+  connect() call in client.c was therefore always a plain blocking call
+  with no bound on it at all, regardless of the connect-timeout setting.
+* Confirmed live on 2026-07-27: a poll to a genuinely unresponsive hub
+  (39:902/0@amiganet) hung inside connect() indefinitely. Because
+  v10.5's AMIGA shutdown drain in exitfunc() deliberately never gives up
+  on a still-running session (see v10.5's changelog entry -- a
+  CreateNewProcTags child has no segment-list of its own, so letting the
+  parent exit while one is still running risks a crash), the whole
+  process was then stuck for good once something tried to shut it down,
+  recoverable only by a full reset.
+* Fixed the portable way rather than chasing an AmigaOS alarm()
+  equivalent: when connect-timeout is set, the socket is made
+  non-blocking before connect() (the same IoctlSocket(FIONBIO)
+  setsockopts() already used post-connect everywhere else in this
+  codebase) and the wait for it to complete is bounded with select() --
+  exactly the same pattern nettimeout already uses to bound in-session
+  I/O. This is the standard, OS-agnostic way BSD-socket code implements
+  connect timeouts and needs nothing AmigaOS-specific at all.
+* connect-timeout defaults to 0 (disabled) in stock binkd, same as every
+  other platform, and none of this BBS's per-network .cfg files had it
+  set -- so the fix by itself would have done nothing until the setting
+  was actually turned on. Added "connect-timeout 60" to all 8 deployed
+  configs (AmiBinkd.cfg and all 7 per-network .cfg files) as part of
+  this release. The packaged DH4:AmiBinkD/ example config was NOT
+  updated (that whole package has been stale at v10.0 since inception --
+  see "Not Done Yet").
+
+v10.7 - Peer/Own-Socket Identity Resolution Race Fix
+------------------------------------------------------
+
+* v10.5's design notes already flagged errno as a shared, unprotected
+  global across concurrently-running sessions (this toolchain's errno,
+  via TCPERR()/TCPERRNO -> strerror(errno)/errno, is libnix's plain
+  global, not per-Task storage) and judged it low-severity, deferred.
+  Confirmed live on 2026-07-26: a burst of 6 near-simultaneous inbound
+  connections all hit protocol()'s getpeername() call at once, and every
+  one of them logged the nonsensical "getpeername: No error" -- a
+  sibling session's own (successful) syscall reset the shared errno to 0
+  in the gap between this session's failing getpeername() and the
+  Log() call that read it back. All 6 also resolved to "incoming
+  session with unknown" as a result (the getpeername() failure path
+  skips hostname/IP resolution entirely). The BBS was reset shortly
+  after with no further log activity from those sessions -- undiagnosed
+  whether that silence was caused by this race or coincidental, but the
+  race itself is clearly real and worth closing regardless.
+* Fixed by adding a new dedicated semaphore, peernamesem, held around
+  getpeername() and getsockname() in protocol.c, each paired tightly
+  with its own immediate TCPERR()/errno-dependent logging -- so two
+  sessions can no longer interleave between "the syscall runs" and
+  "its errno gets logged." A dedicated semaphore rather than reusing
+  hostsem/resolvsem, since this code path itself calls into
+  getnameinfo() (rfc2553.c), which already takes those internally --
+  reusing either here would self-deadlock.
+* Scope note: this fixes the specific getpeername()/getsockname()
+  critical section that was actually observed racing. Other TCPERR()/
+  TCPERRNO call sites elsewhere (client.c's outbound connect()/socket()/
+  bind(), server.c's servmgr setup, iptools.c's ioctl paths) have the
+  same latent shared-errno exposure but haven't been observed racing in
+  practice and are not covered by this release -- see section 16.
+
+v10.6 - Stale .csy/.bsy Hold Actually Honored
+------------------------------------------------
+
+* v10.3 added a give-up/backoff to process_bsy(): after
+  BSY_GIVEUP_TRIES (3) consecutive failed unlink attempts on a stale
+  .csy/.bsy, it would log "giving up ... holding Ns" and call
+  hold_node() to mark that address unavailable for BSY_GIVEUP_HOLD
+  (300) seconds. What it never did was check that hold before trying
+  again itself: process_bsy() re-ran its full stat()/unlink attempt on
+  every single directory rescan regardless of an active hold, so the
+  "holding 300s" message was cosmetic -- it kept re-attempting (and
+  re-failing, and re-logging "giving up ... holding 300s") roughly
+  once per rescan_delay the whole time it claimed to be holding.
+* Confirmed live on 2026-07-26: a wedged 80:774/0@retronet .bsy lock
+  produced over 900 "giving up removing stale .bsy ... holding 300s"
+  log lines across a continuous ~4-hour stretch (03:07-07:05), hammering
+  the filesystem and log the entire time, before the BBS was manually
+  reset. The v10.3 hold_node() call was doing its job for outbound
+  dialing (q_next_node() already honors hold_until correctly) -- only
+  process_bsy()'s own retry loop was ignoring it.
+* Fixed by having process_bsy() check node->hold_until at the very top,
+  before doing anything else: if the node is currently held, return
+  immediately without stat()-ing the file, attempting an unlink, or
+  logging anything. Once the hold naturally expires (already handled by
+  the existing process_hld()/.hld-file mechanism), normal handling
+  resumes automatically.
+* Note: like v10.1 and v10.3, this does not root-cause why the
+  underlying lock file sometimes never releases -- it makes the
+  existing backoff actually take effect instead of being purely
+  cosmetic.
+
+v10.5 - Real Concurrency (CreateNewProcTags)
+------------------------------------------------
+
+* Through v10.4, branch.c ran every session (inbound or outbound)
+  synchronously - no fork()/pthreads without ixemul.library, which this
+  port deliberately avoids. v10.5 adds real concurrency: each session
+  now runs as its own genuine AmigaOS process via
+  CreateNewProcTags(NP_Entry=...) - see section 05 for the full
+  explanation, including why this behaves closer to a thread than a
+  Unix fork() on classic AmigaOS's single flat address space.
+* NP_Entry takes no startup argument, and this codebase's own
+  SIGF_SINGLE turned out to be the same physical bit as SIGF_BLIT
+  (graphics.library's blitter signal) - not a safe, documented way to
+  hand the child its session data. Used instead: spawn the child one
+  NP_Priority below the parent's current priority, then store the args
+  pointer in the child's tc_UserData with no synchronization needed -
+  AmigaOS's priority-preemptive scheduler guarantees the (lower-
+  priority) child cannot run before the (higher-priority, still-ready)
+  parent has finished that store.
+* bsdsocket.library (Roadshow) denies Processes other than the one that
+  opened it access to its functions by default. Every session but the
+  very first would have silently failed all socket calls without
+  amiga_socket_init() opting into SBTC_CAN_SHARE_LIBRARY_BASES.
+* Fixed a latent race in the final n_servers/n_clients decrement
+  (server.c's serv(), client.c's call()): a bare, unprotected decrement
+  that was only ever safe because branch() never ran two sessions at
+  once before now. Wrapped in threadsafe(), matching the HAVE_THREADS
+  build's existing equivalent (the semaphore infrastructure itself was
+  already fully implemented for AMIGA, just unused until now).
+* Fixed qn_free() (ftnq.c) unconditionally clearing every node's
+  in-memory busy flag on every outbound-queue rebuild, including nodes
+  whose session might now still be genuinely running concurrently. Left
+  harmless in practice by call()'s own separate F_CSY disk-lock check
+  (a resulting duplicate dial attempt just logs "busy, skipping" rather
+  than actually double-dialing), but fixed at the source to avoid the
+  wasted attempt and log noise.
+* Rewrote exitproc.c's shutdown path for AMIGA: waits indefinitely for
+  in-flight sessions to finish rather than timing out after a few
+  seconds and proceeding anyway, unlike the HAVE_THREADS build's
+  equivalent. This is deliberate, not a lesser implementation - a
+  CreateNewProcTags(NP_Entry=...) child has no pr_SegList reference of
+  its own to the code it's executing, only the parent's does, so
+  letting the parent's exit() complete while a child was still running
+  risked the child executing out of memory that had just been freed.
+  See section 12's "seems to hang instead of exiting" entry.
+* SLEEP() (the scheduler's idle-wait, client.c) now wakes early via
+  wakecmgr for AMIGA too, matching HAVE_THREADS - a finished concurrent
+  session PostSem()'s it, so a freed session slot gets reused promptly
+  instead of waiting out whatever's left of the current poll interval.
+* Known, accepted limitations of this first concurrent release (shared
+  errno/mypid/rand() state across sessions) are documented in section
+  05, not fixed - low practical risk, judged not worth the added
+  complexity for this release.
+
+v10.4 - n_servers Leak Fix (Inbound "too many servers")
+------------------------------------------------------------
+
+* Confirmed live on 2026-07-25: every inbound connection started failing
+  with "too many servers" starting around 11:03PM the previous night,
+  including the BBS's own local scheduler triggering scheduled network
+  polls (source 192.168.86.1) -- not just outside connections. Outbound
+  polling (this BBS dialing out to hubs) was unaffected throughout,
+  which is why nothing else looked wrong.
+* Root cause: the exact same class of bug as the n_clients leak fixed
+  during the original v10.0 port (see section 17, finding 7 / the
+  client.c bullet under "What had to change") -- but on the *inbound*
+  side, which never got the equivalent fix. server.c's serv() (the
+  per-inbound-session worker) increments n_servers unconditionally on
+  every accepted connection, but only decrements it under
+  HAVE_THREADS or DOS/DEBUGCHILD -- AMIGA was missing from that
+  #elif, unlike client.c's call(), which already includes AMIGA in its
+  own equivalent decrement. Every inbound session on this port
+  therefore leaked n_servers by +1 forever. Once the count exceeded
+  max_servers (100, the binkd default -- not overridden in
+  AmiBinkd.cfg), every subsequent inbound connection was rejected
+  permanently, since the counter never shrinks on its own. Only a
+  process restart clears it -- this cannot self-heal.
+* Fixed by adding AMIGA to server.c's decrement #elif, mirroring
+  client.c's existing pattern exactly: "#elif defined(DOS) ||
+  defined(DEBUGCHILD) || defined(AMIGA)". One-line change.
+* Note: v10.3's stale-.csy/.bsy give-up/backoff logic (previous
+  section) is unrelated to this bug and continues to work as designed
+  -- this is a separate, independent leak in a different counter.
+
+v10.3 - Stale .csy/.bsy Give-Up/Backoff
+------------------------------------------
+
+* v10.1 made the .csy/.bsy stale-lock unlink retry-capable (sdelete(),
+  up to 5 attempts 1 second apart) but that retry loop was itself
+  retried forever, once per rescan_delay, by the outer scheduler
+  (process_bsy() in ftnq.c) any time the underlying lock never actually
+  clears. Confirmed live on 2026-07-23: an ArakNet stale .bsy for
+  10:100/0 never cleared, and process_bsy() kept re-attempting the
+  unlink every ~5 seconds continuously for over 3 hours (01:40-05:14)
+  without ever completing that poll. Because this port runs one BinkP
+  session at a time (section 05) and the driver scripts (section 09)
+  Execute each network's poll in sequence, this single wedged node
+  blocked every other configured network from being polled at all for
+  the rest of the night -- not the purely cosmetic failure mode
+  documented in v10.1's changelog entry.
+* Fixed by giving process_bsy() a bounded number of consecutive
+  unlink-failure attempts (BSY_GIVEUP_TRIES, currently 3) per node
+  before backing off, rather than retrying immediately forever. Once
+  the threshold is hit, it logs a clear "giving up removing stale ...
+  after N tries, holding Ns" message and calls the existing hold_node()
+  mechanism (already used elsewhere for connection-retry backoff) to
+  mark that address unavailable for BSY_GIVEUP_HOLD seconds (currently
+  300). q_next_node()/q_not_empty() both already honor hold_until, so
+  a held node with nothing else queued lets that invocation cleanly
+  log "the queue is empty, quitting" and exit -- letting the driver
+  script move on to the next network on schedule instead of hanging.
+  The failure counter (FTN_NODE.bsy_fail_count) resets to 0 on any
+  successful unlink, so an address that clears its own lock goes right
+  back to normal handling.
+* Note: like v10.1, this does not root-cause *why* the lock sometimes
+  never clears (still suspected to correlate with heavy concurrent
+  file-write activity on the same drive image, per the BBS-side
+  incident notes) -- it bounds the damage from that condition instead
+  of eliminating the condition itself. A node that hits this repeatedly
+  will keep cycling through 3 failed tries + a 5-minute hold rather
+  than either hanging forever or silently going quiet permanently.
+
+v10.2 - .dt Unlink Message Fix
+--------------------------------
+
+* Fixed the rare ("error unlinking '...Inbound_Temp/*.dt': No such file
+  or directory") message documented as a cosmetic issue in v10.1's
+  "Known Limitations" (section 16).
+* Root cause was different from the v10.1 .csy/.bsy fix even though the
+  symptom looked similar: remove_hr() (inbound.c) unconditionally tried
+  to delete a partial transfer's .dt data file whenever it cleaned up
+  the matching .hr semaphore file. The .dt file is only created once
+  inb_fopen() actually starts receiving data for that transfer -- if a
+  partial/dup/old .hr marker gets cleaned up before any bytes ever
+  arrived (e.g. session dropped right after the file was negotiated but
+  before the data phase started), there was no .dt file to remove, and
+  unlink()'s expected ENOENT got logged as a level-1 error.
+* Note this is NOT the same fix as v10.1: swapping delete() for
+  sdelete() here would not have helped, since sdelete()'s retry loop
+  only retries on EPERM/EACCES/EAGAIN/ETXTBSY (lock-race errnos) and
+  still logs on ENOENT. Instead, remove_hr() now stat()s the .dt file
+  first and only attempts the delete (and thus only logs) if it
+  actually exists -- the same "ENOENT is an expected outcome, don't
+  log it as an error" precedent already used for pid-file cleanup in
+  binkd.c. Single-session-at-a-time concurrency (section 05) means
+  there's no stat-then-delete race to worry about.
+
+v10.1 - .csy/.bsy Unlink Fix
+------------------------------
+
+* Fixed the .csy/.bsy busy-flag unlink failure documented as a cosmetic,
+  not-yet-root-caused issue in v10.0's "Known Limitations" (section 16).
+  bsy_remove()/bsy_remove_all() (bsy.c) and process_bsy()'s stale-file
+  cleanup (ftnq.c) were calling delete(), a single-attempt unlink, while
+  this codebase already had a retry-capable sdelete() (tools.c) built for
+  exactly this class of transient Amiga file-lock race -- bsy.c simply
+  never used it. Worse, even sdelete() didn't retry on ETXTBSY ("Text
+  file busy"), the specific errno actually being hit.
+* sdelete() now also retries on ETXTBSY (up to 5 attempts, 1 second
+  apart), matching its existing retry behavior for EPERM/EACCES/EAGAIN.
+  bsy_remove(), bsy_remove_all(), and process_bsy() all switched from
+  delete() to sdelete().
+* Verified live: AmigaNet hit the exact "Text file busy" condition
+  post-deploy, visibly retried for ~5 seconds, and completed its session
+  normally afterward -- confirming the retry path works without
+  introducing any blocking or hangs of its own.
+* Note: the underlying transient lock that makes the file briefly
+  unremovable is still not root-caused -- this fix makes the cleanup
+  attempt robust (and consistent with how the rest of the codebase
+  already handles this exact class of race) rather than eliminating the
+  brief lock itself. The "error unlinking ... Text file busy" message
+  can still appear in logs on occasion; it no longer reflects a
+  single-attempt failure with no retry.
+
+v10.0 - Native AmigaOS Port
+----------------------------
+
+* Rebuilt from a clean upstream binkd checkout with every ixemul/ixnet
+  dependency replaced by native AmigaOS/bsdsocket.library equivalents.
+* AMIGA build target now runs each BinkP session synchronously (same
+  code path as stock binkd's non-fork/non-thread "DOS" fallback)
+  instead of using ixemul's vfork()-based concurrency.
+* Found and fixed five real Amiberry bsdsocket_emu behavioral
+  divergences from genuine BSD sockets (getaddrinfo()/getnameinfo() not
+  implemented, non-blocking-mode ioctl/fcntl not working on sockets,
+  accept() not guaranteed non-blocking after a ready select(),
+  WaitSelect()'s signals parameter not working, and WaitSelect()
+  breaking under rapid repeated calls) -- see section 15.
+* Fixed n_clients never being decremented for the AMIGA build target,
+  which hung multi-node polling (or chained per-network driver scripts)
+  right after the first session completed -- see section 15, finding 7.
+* Fixed o_rename()'s inverted success/failure return value and missing
+  errno, which silently orphaned received files under their temp names
+  in temp-inbound -- see section 15, finding 8.
+* Fixed a PRIuMAX/PRIdMAX format-string size mismatch (4-byte format
+  specifier against this toolchain's real 8-byte intmax_t/uintmax_t)
+  that corrupted outgoing M_FILE protocol message fields on any session
+  with real mail queued, causing "missing tmp file" failures on the
+  receiving end.
+* Cross-compiled clean (zero warnings) with the bebbo/amiga-gcc
+  toolchain; confirmed zero ixemul/ixnet references and zero FPU
+  instructions in the built binary.
+* Verified live on a production Amiberry instance: both outbound
+  (client/poll) and inbound (server) sessions, full multi-network
+  polling (7 networks) in one run with real inbound file reception and
+  successful tosser import, and an unattended overnight soak test
+  across all seven networks with no hangs and no regressions.
+
+
+===============================================================================
+19. DISCLAIMER
+===============================================================================
+
+AmiBinkD is provided as-is.
+
+This is a from-scratch reconstruction of ixemul-dependent Amiga binkd
+behavior, verified against one real system (Amiberry-emulated AmigaOS
+3.x, bsdsocket_emu). Other bsdsocket.library implementations (real
+Roadshow, AmiTCP) have not been tested and may behave differently --
+see section 15 before assuming a finding there applies beyond Amiberry.
+
+Every FTN network and BBS system is different. Test carefully, using
+section 11's procedure, before relying on this for live mail.
+
+The author is not responsible for lost mail, misconfigured domains or
+addresses, missing or wrong node passwords, or damage caused by
+improper setup.
+
+Always keep backups.
+
+
+===============================================================================
+20. CREDITS AND CONTACT
+===============================================================================
+
+AmiBinkD is a native AmigaOS port of binkd
+(https://github.com/pgul/binkd), originally written by Dima Maloff and
+maintained by the binkd project. All BinkP protocol logic, FTN packet
+handling, and configuration semantics are upstream binkd's; this port's
+own contribution is the AmigaOS/bsdsocket.library integration layer and
+the real-hardware fixes documented in section 15.
+
+Earlier Amiga port (AmiBinkd v5.00 - v9.02, 2012-2013):
+
+Rudi Timmermans, X-TReMe BBS
+
+AmiBinkD carried this name on the Amiga long before the present release.
+Rudi Timmermans built and maintained it through v9.02, made it freeware
+at v5.00, and got a working BinkP mailer onto classic AmigaOS at a time
+when that meant living with ixemul.library. This port is a from-scratch
+reconstruction rather than a recompile of his -- the ixemul dependency is
+gone and every session now runs as a native AmigaOS process (section 05)
+-- but the program's name, its configuration file format, and the shape
+of its session log all come from his work. Set a v9.01 log from 2013
+beside one from this release and they are recognisably the same program.
+Credit where it is due.
+
+Built and tested for:
+
+Reign of Fire BBS
+C-Net/5 Amiga Pro
+call.rofbbs.com:6800
+
+Created for the C-Net/5 SysOp community and other retro BBS operators
+who want native FTN mail transport on real or emulated Amiga systems
+without an ixemul.library dependency.
+
+Website:
+
+https://www.rofbbs.com
+
+SysOp / Author (Amiga port):
+
+Gary "Spitfire" McCulloch
+
+Networks tested against:
+
+AmigaNet, ArakNet, CommodoreNet, DiscipleNet, FidoNet, PiNet, RetroNet
+
+===============================================================================
+END OF MANUAL.TXT                                      SpitfireTN Entertainment
+===============================================================================

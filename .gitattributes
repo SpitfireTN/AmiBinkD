@@ -1,0 +1,13 @@
+# AmigaOS Workbench icons are binary. Without this, a clone on a machine with
+# core.autocrlf set would rewrite bytes inside the icon and Workbench would
+# stop recognising it. There is no other copy -- these are drawn by hand.
+*.info binary
+
+# The release package is read on AmigaDOS, which is happy with LF. Keep these
+# LF on every platform: CRLF injected into File_ID.DIZ shows as stray ^M in
+# BBS file listings, and into an AmigaDOS script can break Execute.
+dist/*.txt        text eol=lf
+dist/*.cfg        text eol=lf
+dist/*.scr        text eol=lf
+dist/File_ID.DIZ  text eol=lf
+dist/MakeAmiBinkd text eol=lf

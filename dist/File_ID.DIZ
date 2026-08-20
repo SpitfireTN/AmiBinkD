@@ -1,0 +1,16 @@
+AmiBinkD v10.25 - SpitfireTN Ent.
+-=====================================-
+Native AmigaOS FTN mailer, binkd port.
+No ixemul/ixnet -- talks straight to
+bsdsocket.library. BinkP protocol,
+CRAM-MD5 auth, FTN mail for C-Net/5
+and other BBS engines. Fixes shredded
+log lines and outbound 0-byte mail.
+-=====================================-
+.--------https://www.rofbbs.com-------.
+| _____     _____                     |
+|| __  |___|   __|  call.rofbbs.com   |
+||    -| . |   __|Port: 6800 6400 8502|
+||__|__|___|__|      (423) 541-8271   |
+|                 call@call.rofbbs.com|
+`-------------------------------------'

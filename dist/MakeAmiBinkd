@@ -1,0 +1,27 @@
+.KEY VER/A
+.BRA {
+.KET }
+;
+; Build an AmiBinkD release archive for the file section.
+;
+;   Execute DH4:MakeAmiBinkd 10_31
+;
+; The version is an argument so this script does not have to be copied and
+; edited for every release (it was MakeAmiBinkd1025 before, and the 10.25 in
+; three places was easy to half-update).
+;
+; MUST RUN ON THE AMIGA. The Linux host's `lha' is Lhasa, which only
+; EXTRACTS. Every previous release carries the [Amiga] OS byte, so it is
+; built with DH0:C/lha to stay consistent.
+;
+; Layout, matching every release since v10.18:
+;     AmiBinkD/  (binary, readme.txt, manual.txt, amibinkd-example.cfg,
+;                 amibinkd.scr, AmiBinkD.info)
+;     File_ID.DIZ
+;
+CD DH4:
+Delete UDBase0:NETWORKING/AmiBinkd{VER}.lha QUIET
+lha -r a UDBase0:NETWORKING/AmiBinkd{VER}.lha AmiBinkD File_ID.DIZ
+Echo ""
+Echo "Archive contents:"
+lha l UDBase0:NETWORKING/AmiBinkd{VER}.lha
