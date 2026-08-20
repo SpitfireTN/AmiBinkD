@@ -193,11 +193,6 @@ extern int amiga_set_file_dates;
    * error, which is what sdelete()'s retry loop expects. See
    * amiga/delete.c. */
   extern int o_unlink (const char *path);
-  /* v10.27: raw AmigaDOS error from the last o_unlink() failure. EACCES is
-   * ambiguous -- ERROR_OBJECT_IN_USE (218) and ERROR_DELETE_PROTECTED (222)
-   * both map to it, and they need opposite fixes. */
-  extern long amiga_last_dos_err (void);
-  #define UNLINK_DOSERR() amiga_last_dos_err()
   #define UNLINK(p) o_unlink(p)
 #else
   #define UNLINK(p) unlink(p)

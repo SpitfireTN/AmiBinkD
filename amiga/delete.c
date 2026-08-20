@@ -27,25 +27,20 @@
 #include <proto/dos.h>
 #include <errno.h>
 
-/* v10.27: keep the RAW AmigaDOS error alongside the translated errno.
+/* NOTE on the two EACCES cases below: ERROR_OBJECT_IN_USE and
+ * ERROR_DELETE_PROTECTED both map to EACCES, so a caller cannot tell them
+ * apart from errno alone.
  *
- * The table below folds two genuinely different failures into one errno:
+ * v10.27 tried to expose the raw IoErr() through a module static so bsy.c
+ * could print it. That did not work and was removed in v10.29: binkd runs
+ * each session as its own AmigaOS Process SHARING ONE ADDRESS SPACE, so a
+ * file-scope static is written by every session at once. It reported 0 on all
+ * 44 samples -- impossible, since IoErr()==0 maps to EIO while every message
+ * said EACCES, and the two are assigned on consecutive lines below. Same
+ * defect as the old global mypid (fixed in v10.26).
  *
- *     ERROR_OBJECT_IN_USE    (218) -> EACCES    something still holds the file
- *     ERROR_DELETE_PROTECTED (222) -> EACCES    the file's 'd' bit is clear
- *
- * Both print as "Permission denied", and they need opposite fixes -- one is
- * a handle still open somewhere, the other is a protection bit set at
- * creation. bsy.c's "could not remove own lock" has been reporting EACCES for
- * days without us being able to tell which. Callers can now read the real
- * code via amiga_last_dos_err(). */
-static LONG amiga_last_ioerr = 0;
-
-LONG amiga_last_dos_err (void)
-{
-  return amiga_last_ioerr;
-}
-
+ * If this distinction is ever needed again, return the code THROUGH THE CALL
+ * -- an out-parameter or a distinct errno -- never through shared state. */
 static int amiga_dos_err_to_errno (LONG dosErr)
 {
   switch (dosErr)
