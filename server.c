@@ -117,7 +117,7 @@ static void serv (void *arg)
       Log (1, "amiga_open_private_socketbase failed, falling back to shared bsdsocket.library");
 
     got = ObtainSocket ((LONG) ho.id, ho.family, SOCK_STREAM, 0);
-    Log (2, "handoff: child base=%p obtained id %i -> fd %li",
+    Log (7, "handoff: child base=%p obtained id %i -> fd %li",
          (void *) privSocketBase, ho.id, (long) got);
     if (got < 0)
     {
@@ -148,7 +148,7 @@ static void serv (void *arg)
 #ifdef AMIGA
   /* After soclose(): the socket lives in this private base, so the base
    * has to outlive it. */
-  Log (2, "handoff: child closing fd %i, base=%p, n_servers=%i",
+  Log (7, "handoff: child closing fd %i, base=%p, n_servers=%i",
        h, (void *) privSocketBase, n_servers);
   amiga_close_private_socketbase (privSocketBase);
 #endif
@@ -441,7 +441,7 @@ static int do_server(BINKD_CONFIG *config)
            * sockaddr_storage is rfc2553.h's sockaddr_in stand-in, which has
            * no ss_family member. */
           serv_handoff.family = ((struct sockaddr *) &client_addr)->sa_family;
-          Log (2, "handoff: released fd %i as id %li (family %i), n_servers=%i",
+          Log (7, "handoff: released fd %i as id %li (family %i), n_servers=%i",
                (int) new_sockfd, (long) relid, serv_handoff.family, n_servers);
         }
         threadsafe(++n_servers);

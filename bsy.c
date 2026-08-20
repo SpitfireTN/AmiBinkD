@@ -245,7 +245,7 @@ static int bsy_unlink (char *path)
   if (errno == ENOENT)
     return 0;                    /* another Process won the race: job done */
 
-  Log (3, "could not remove own lock `%s': %s", path, strerror (errno));
+  Log (5, "could not remove own lock `%s': %s", path, strerror (errno));
 #else
   rc = sdelete (path);
 #endif

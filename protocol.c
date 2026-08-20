@@ -917,7 +917,12 @@ static int NUL (STATE *state, char *buf, int sz, BINKD_CONFIG *config)
   UNUSED_ARG(sz);
   UNUSED_ARG(config);
 
-  Log (3, "%s", s = strquote (buf, SQ_CNTRL));
+  /* v10.31: the remote's greeting block (OPT/SYS/ZYZ/LOC/NDL/TIME/VER/
+   * BUILD/TRF/QSIZE) arrived here as one Log(3) and was 22%% of the log.
+   * SYS names who we are talking to and stays visible; the rest is
+   * detail for loglevel 5+. */
+  s = strquote (buf, SQ_CNTRL);
+  Log (memcmp (s, "SYS ", 4) == 0 ? 2 : 5, "%s", s);
   if (!memcmp (s, "VER ", 4) &&
       (a = strstr (s, PRTCLNAME "/")) != 0 &&
       (b = strstr (a, ".")) != 0)
@@ -957,34 +962,34 @@ static int NUL (STATE *state, char *buf, int sz, BINKD_CONFIG *config)
       if (!strcmp (w, "NR"))
       {
         state->NR_flag |= WE_NR;      /* They want NR mode - turn it on */
-        Log(2, "Remote requests NR mode");
+        Log(5, "Remote requests NR mode");
       }
       if (!strcmp (w, "ND"))
       {
         state->ND_flag |= WE_ND;      /* They want ND mode - turn it on */
-        Log(2, "Remote requests ND mode");
+        Log(5, "Remote requests ND mode");
       }
       if (!strcmp (w, "NDA"))
       {
         state->ND_flag |= CAN_NDA;     /* They supports asymmetric ND */
-        Log(2, "Remote supports asymmetric ND mode");
+        Log(5, "Remote supports asymmetric ND mode");
       }
       if (!strcmp (w, "CRYPT"))
       {
         state->crypt_flag |= THEY_CRYPT;  /* They want crypt mode */
-        Log(2, "Remote requests CRYPT mode");
+        Log(5, "Remote requests CRYPT mode");
       }
       if (!strncmp(w, "CRAM-", 5) && !no_MD5 &&
           state->to && (state->to->MD_flag >= 0))
       {
-        Log(2, "Remote requests MD mode");
+        Log(5, "Remote requests MD mode");
         xfree(state->MD_challenge);
         state->MD_challenge=MD_getChallenge(w, NULL);
       }
 #ifdef WITH_ZLIB
       if (!strcmp (w, "GZ"))
       {
-        Log(2, "Remote supports GZ mode");
+        Log(5, "Remote supports GZ mode");
 #ifdef ZLIBDL
         if (zlib_loaded)
 #endif
@@ -994,7 +999,7 @@ static int NUL (STATE *state, char *buf, int sz, BINKD_CONFIG *config)
 #ifdef WITH_BZLIB2
       if (!strcmp (w, "BZ2"))
       {
-        Log(2, "Remote supports BZ2 mode");
+        Log(5, "Remote supports BZ2 mode");
 #ifdef ZLIBDL
         if (bzlib2_loaded)
 #endif
@@ -1004,7 +1009,7 @@ static int NUL (STATE *state, char *buf, int sz, BINKD_CONFIG *config)
       if (!strcmp (w, "EXTCMD"))
       {
         state->extcmd = 1;  /* They can accept extra params for commands */
-        Log(2, "Remote supports EXTCMD mode");
+        Log(5, "Remote supports EXTCMD mode");
       }
       free (w);
     }
@@ -1522,7 +1527,7 @@ static int ADR (STATE *state, char *s, int sz, BINKD_CONFIG *config)
     }
     else
     {
-      Log (2, "addr: %s (n/a or busy)", szFTNAddr);
+      Log (5, "addr: %s (n/a or busy)", szFTNAddr);
 #if 1
       if (pn && strcmp(pn->pwd, "-") != 0 && state->to == 0)
       {
@@ -1694,12 +1699,12 @@ static int complete_login (STATE *state, BINKD_CONFIG *config)
          (state->MD_flag == 1) ? "MD5" : "plain text");
   if (state->ND_flag & WE_ND)
   { state->NR_flag |= WE_NR;
-    Log (3, "we are in ND mode");
+    Log (5, "we are in ND mode");
   }
   if (state->ND_flag & THEY_ND)
     Log (3, "remote is in ND mode");
   else if (state->NR_flag == WE_NR)
-    Log (3, "we are in NR mode");
+    Log (5, "we are in NR mode");
   if (state->state != P_SECURE)
     state->crypt_flag = NO_CRYPT;
   else if (state->crypt_flag == (WE_CRYPT|THEY_CRYPT) && !state->MD_flag)
@@ -2189,7 +2194,7 @@ static int start_file_recv (STATE *state, char *args, int sz, BINKD_CONFIG *conf
       --state->GET_FILE_balance;
     }
 
-    Log (3, "receiving %s (%" PRIuMAX " byte(s), off %" PRIuMAX ")",
+    Log (5, "receiving %s (%" PRIuMAX " byte(s), off %" PRIuMAX ")",
          state->in.netname, (uintmax_t) (state->in.size), (uintmax_t) offset);
 #ifdef BW_LIM
     setup_rate_limit(state, config, &state->bw_recv, state->in.netname);
@@ -3777,5 +3782,5 @@ void protocol (SOCKET socket_in, SOCKET socket_out, FTN_NODE *to, FTN_ADDR *fa,
   deinit_protocol (&state, config, status);
   evt_set (state.evt_queue);
   state.evt_queue = NULL;
-  Log (4, "session closed, quitting...");
+  Log (5, "session closed, quitting...");
 }

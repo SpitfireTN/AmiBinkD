@@ -394,7 +394,7 @@ int poll_node (char *s, BINKD_CONFIG *config)
 
     exp_ftnaddress (&target, config->pAddr, config->nAddr, config->pDomains.first);
     ftnaddress_to_str (buf, &target);
-    Log (4, "Polling %s (`%c' flavour)", buf, POLL_NODE_FLAVOUR);
+    Log (5, "Polling %s (`%c' flavour)", buf, POLL_NODE_FLAVOUR);
     locknodesem();
     if (!get_node_info_nolock (&target, config))
       add_node_nolock (&target, "*", NULL, NULL, NULL, '-', NULL, NULL, 
@@ -450,7 +450,7 @@ static int poll_all_node (FTN_NODE *node, void *arg)
     return 0;
   }
 
-  Log (4, "Polling %s (`%c' flavour)", buf, POLL_NODE_FLAVOUR);
+  Log (5, "Polling %s (`%c' flavour)", buf, POLL_NODE_FLAVOUR);
   if (create_poll (&node->fa, POLL_NODE_FLAVOUR, pa->config))
     ++pa->made;
 

@@ -191,7 +191,7 @@ static int do_client(BINKD_CONFIG *config)
           {
             Log (4, "the queue is empty, quitting...");
             Log (4, "");
-            Log (2, "END, AmiBinkd v10.30 " MYNAME "/" MYVER);
+            Log (2, "END, AmiBinkd v10.31 " MYNAME "/" MYVER);
             return -1;
           }
           unblocksig();
@@ -474,7 +474,7 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
       free(cmdline);
       if (pid != -1)
       {
-        Log (4, "connected");
+        Log (5, "connected");
         add_socket(sock_out);
         break;
       }
@@ -599,19 +599,19 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
         char *sp = strchr(host, ':');
         if (sp) *sp = '\0';
         if (strcmp (port, config->oport) == 0)
-          Log (4, "trying %s via %s %s:%s...", host,
+          Log (5, "trying %s via %s %s:%s...", host,
                proxy[0] ? "proxy" : "socks", addrbuf, servbuf);
         else
-          Log (4, "trying %s:%s via %s %s:%s...", host, port,
+          Log (5, "trying %s:%s via %s %s:%s...", host, port,
                proxy[0] ? "proxy" : "socks", addrbuf, servbuf);
       }
       else
 #endif
       {
         if (strcmp (port, config->oport) == 0)
-          Log (4, "trying %s [%s]...", host, addrbuf);
+          Log (5, "trying %s [%s]...", host, addrbuf);
         else
-          Log (4, "trying %s [%s]:%s...", host, addrbuf, servbuf);
+          Log (5, "trying %s [%s]:%s...", host, addrbuf, servbuf);
         dst_ip = addrbuf;
         strnzcpy (port, servbuf, MAXPORTSTRLEN);
       }
@@ -675,7 +675,7 @@ static int call0 (FTN_NODE *node, BINKD_CONFIG *config)
 #if defined(HAVE_FORK) && !defined(HAVE_THREADS)
         alarm(0);
 #endif
-        Log (4, "connected");
+        Log (5, "connected");
         sock_out = sockfd;
         break;
       }

@@ -601,7 +601,7 @@ int inb_done (TFILE *file, STATE *state, BINKD_CONFIG *config)
         return 0;
       }
     }
-    Log (2, "%s -> %s", netname, real_name);
+    Log (5, "%s -> %s", netname, real_name);
   }
 
   /* Replacing .dt with .hr and removing temp. file */
