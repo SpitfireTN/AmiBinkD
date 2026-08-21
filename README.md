@@ -6,30 +6,51 @@ ixnet.library.
 
 ---
 
-## Current release: v10.18 — recommended
+## Current release: v10.32 — recommended
 
-**v10.18 is the release to run.** Inbound and outbound both work, and the
-session-hang arc that made v10.16 and v10.17 unsafe is closed. Verified over
-a 19h37m unattended soak on the live BBS: 22 poll cycles (22 BEGIN /
-22 END), 29/29 scheduled events finished, 66 sessions all `OK`, 82 packets
-received, both queues drained, **zero errors and zero warnings**.
+**v10.32 is the release to run.** Get it from the
+[releases page](https://github.com/SpitfireTN/AmiBinkD/releases) or from the
+BBS file area as `AmiBinkd10_32.lha`.
 
-If you are on an earlier build, upgrade — with one config change:
+**If you are on v10.23 or earlier, upgrade — your outbound mail is not being
+delivered.** Every bundle was announced as 0 bytes, because this toolchain's
+`fstat()` reports `st_size` as 0 while returning success. Sessions look
+completely normal in the log. Fixed in v10.24 (`amiga/fstat.c`).
 
-    set-file-dates      leave OFF (the default on this port)
+Since v10.18, in the order they matter:
 
-That keyword is new in v10.18 and is what closes the last hang. See
-"The session-hang arc" below for why, and `manual.txt` section 06 for the
-full keyword reference.
+- **v10.24** — outbound mail actually sends. See above.
+- **v10.23** — socket errors report the real `errno`. bsdsocket.library never
+  writes to `errno` unless handed a pointer via `SBTC_ERRNOPTR`, so every
+  socket error used to echo whatever last touched it.
+- **v10.25** — log lines stop being shredded when instances overlap. `Log()`
+  took a private semaphore; this port runs separate programs, so it needs a
+  public one.
+- **v10.26** — a distinct id per session, so concurrent sessions can be told
+  apart in the log.
+- **v10.30/v10.31** — one line per inbound connection carrying the port, and
+  a loglevel 4 that reads without `nolog` masks. The sample config no longer
+  ships them because it no longer needs them.
+- **v10.32** — an address matching no configured node can no longer spin the
+  stale-lock cleanup forever. It wrote 2.2 million log lines here and stopped
+  outbound mail for nearly seven hours while inbound carried on normally.
 
-**There is no release archive in this repo, deliberately.** The `.lha` is
-built on the Amiga side with `DH0:C/lha`, because the host tools available
-here (lhasa, 7z) can only *read* LZH and not create it, and because
-building it there preserves the AmigaOS protection bits and `.info` icon an
-Aminet package carries. A stale archive named as the release is worse than
-none — anyone cloning would reasonably assume it was current — so the
-v10.0-era one was removed rather than left to rot. Build from source with
-the toolchain below, or get the packaged release from the BBS.
+### Known issue
+
+Rarely — around 0.02% of log lines — a write intended for one file appears in
+another: log text inside a `.bsy`, or a fragment in the log with no
+timestamp. **This is not new in v10.32; it predates every release.**
+
+Root cause, found 2026-08-21: libnix hands out descriptors from `___allocfd`,
+which scans and `realloc()`s a shared global table (`___stdfiledes`) with no
+locking anywhere in its file layer — verified across `open`, `close`,
+`write`, `read`, `lseek`, `fopen`, `fwrite`. This port runs sessions as
+separate Processes in one address space, so two opening files at once can be
+handed the same slot, and the loser writes into the winner's file.
+
+Only observed under emulation. v10.32 bounds the worst consequence. A fix is
+in progress.
+
 
 ### The version jump: v10.16 and v10.17 were never released
 
