@@ -9,3 +9,9 @@ amiga/*.d
 # Session backups (.PRE_<tag>) -- local undo copies, not history
 *.PRE_*
 .session-backups/
+
+# Amiga test binaries -- rebuilt from the .c files in tests/
+tests/logtest
+tests/logtest2
+tests/logtest3
+tests/probe

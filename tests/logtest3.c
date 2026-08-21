@@ -27,7 +27,21 @@
  *           This is the reproducer: 92/1000 log lines lost, 4 LOCK markers
  *           written into the log, .lck files accumulating ~93 markers.
  *
- *   mode 1  THE CANDIDATE FIX: the lock file's create/write/close is taken
+ *   mode 2  THE CANDIDATE FIX: the log handle is opened ONCE and kept open
+ *           for the whole run, shared by every writer Process, with an
+ *           fflush() after each line. Lock files still churn exactly as in
+ *           mode 0. If the log stops being corrupted, then taking the log
+ *           out of the open/close cycle is enough, and the same change is
+ *           available in tools.c.
+ *
+ *           The hazard being tested as much as the fix: a FILE * opened by
+ *           one Process and written by others. They share one address space
+ *           so the structure is reachable, and AmigaDOS file handles are not
+ *           Process-bound -- but if libnix tears down streams when a child
+ *           Process ends, this is a use-after-free. That is exactly why it
+ *           is tried HERE and not in the mailer.
+ *
+ *   mode 1  DISABLED -- deadlocks: the lock file's create/write/close is taken
  *           under the SAME semaphore as the log write, so no two Processes
  *           ever have file opens in flight at once. If the misrouting stops,
  *           the real fix is a global file-op lock (or holding the log handle
@@ -59,19 +73,33 @@
 #endif
 struct Process * __stdargs CreateNewProcTags (ULONG tag1type, ...);
 
-#define SEM_NAME  "AmiBinkdLogTest3"
+/* The semaphore name is derived from the run's base name, NOT fixed.
+ *
+ * 2026-08-20/21: mode 1 deadlocked with writers blocked inside
+ * ObtainSemaphore. An Exec public semaphore lives in a system list and
+ * OUTLIVES the program that created it -- so it stayed locked, and every
+ * later run that called FindSemaphore("AmiBinkdLogTest3") blocked on the
+ * first ObtainSemaphore before creating a single file. Two runs wedged a
+ * shell and tested nothing at all.
+ *
+ * A per-run name means a poisoned semaphore can never affect a later run.
+ * The dead one leaks until reboot; it is ~46 bytes and harmless. */
+#define SEM_PREFIX "AmiBinkdLT-"
 #define STACKSIZE (256*1024)
 
 typedef struct { const char *base; int id, rounds, mode; } wargs_t;
 
 static struct SignalSemaphore *g_sem   = NULL;
 static volatile LONG           g_alive = 0;
+static FILE                   *g_log   = NULL;   /* mode 2: shared, kept open */
+
+static char g_semname[64];
 
 static struct SignalSemaphore *test_sem (void)
 {
     struct SignalSemaphore *s;
     Forbid ();
-    s = (struct SignalSemaphore *) FindSemaphore ((STRPTR) SEM_NAME);
+    s = (struct SignalSemaphore *) FindSemaphore ((STRPTR) g_semname);
     if (s == NULL)
     {
         s = (struct SignalSemaphore *)
@@ -79,7 +107,7 @@ static struct SignalSemaphore *test_sem (void)
         if (s)
         {
             InitSemaphore (s);
-            s->ss_Link.ln_Name = (char *) SEM_NAME;
+            s->ss_Link.ln_Name = g_semname;
             AddSemaphore (s);
         }
     }
@@ -119,14 +147,29 @@ static void writer_body (void *arg)
         if (w->mode == 1)
             ReleaseSemaphore (g_sem);
 
-        /* 2. the Log()-style write: locked, append, one line, close */
+        /* 2. the Log()-style write */
+        snprintf (line, sizeof line, "LINE id=%02d seq=%04d %s",
+                  w->id, r % 10000, filler);
+
         ObtainSemaphore (g_sem);
-        if ((fp = fopen (log, "a")) != NULL)
+        if (w->mode == 2)
         {
-            snprintf (line, sizeof line, "LINE id=%02d seq=%04d %s",
-                      w->id, r % 10000, filler);
-            fprintf (fp, "%s\n", line);
-            fclose (fp);
+            /* open once, keep it, flush every line */
+            if (g_log == NULL)
+                g_log = fopen (log, "a");
+            if (g_log)
+            {
+                fprintf (g_log, "%s\n", line);
+                fflush (g_log);
+            }
+        }
+        else
+        {
+            if ((fp = fopen (log, "a")) != NULL)
+            {
+                fprintf (fp, "%s\n", line);
+                fclose (fp);
+            }
         }
         ReleaseSemaphore (g_sem);
     }
@@ -174,6 +217,10 @@ int main (int argc, char **argv)
         return 20;
     }
 
+    /* unique per base name, so a wedged run cannot poison the next one */
+    snprintf (g_semname, sizeof g_semname, SEM_PREFIX "%s", argv[1]);
+    printf ("logtest3: semaphore \"%s\"\n", g_semname);
+
     if ((g_sem = test_sem ()) == NULL) { printf ("no semaphore\n"); return 20; }
 
     printf ("logtest3: %d writers x %d rounds, mode %d (%s)\n",
@@ -201,6 +248,8 @@ int main (int argc, char **argv)
     }
 
     while (g_alive > 0 && waited < 900) { Delay (25); waited++; }
+
+    if (g_log) { fclose (g_log); g_log = NULL; }   /* parent owns the close */
     printf ("logtest3: done, %ld alive after %d ticks\n", (long) g_alive, waited);
     return 0;
 }
