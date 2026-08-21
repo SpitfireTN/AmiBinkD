@@ -1,0 +1,11 @@
+; Smoke test: run ONE writer in the foreground so any error is visible.
+; If this prints "logtest id=0 mode=0 wrote=20 failed=0 linelen=64"
+; the binary works and the problem is in how the 5-way script launched it.
+;
+;   Execute DH4:LogTest1
+;
+Stack 50000
+Delete DH4:logtest-out.txt QUIET
+Echo "Running one writer, 20 lines, in the foreground:"
+DH4:logtest DH4:logtest-out.txt 0 20 0
+Echo "--- exit code above; file should now be 20 lines ---"

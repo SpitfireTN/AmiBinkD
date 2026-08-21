@@ -1,0 +1,27 @@
+.KEY MODE/A
+.BRA {
+.KET }
+;
+; Five concurrent writers against one file -- the way five concurrent
+; AmiBinkd sessions write the log.
+;
+;   Execute DH4:LogTest 0     plain fopen(path,"a")   -- what ships today
+;   Execute DH4:LogTest 1     the same plus fseek(fp, 0, SEEK_END)
+;
+; Each writer emits 200 lines of exactly 64 characters; a clean run is 1000.
+; Output from each writer is captured to DH4:logtest-run.txt rather than NIL,
+; so a failure is visible instead of silent.
+;
+Stack 50000
+Delete DH4:logtest-out.txt QUIET
+Delete DH4:logtest-run.txt QUIET
+Echo "Starting 5 concurrent writers, mode {MODE}..."
+Run >>DH4:logtest-run.txt DH4:logtest DH4:logtest-out.txt 0 200 {MODE}
+Run >>DH4:logtest-run.txt DH4:logtest DH4:logtest-out.txt 1 200 {MODE}
+Run >>DH4:logtest-run.txt DH4:logtest DH4:logtest-out.txt 2 200 {MODE}
+Run >>DH4:logtest-run.txt DH4:logtest DH4:logtest-out.txt 3 200 {MODE}
+Run >>DH4:logtest-run.txt DH4:logtest DH4:logtest-out.txt 4 200 {MODE}
+Wait 25
+Echo "Done. DH4:logtest-out.txt should hold 1000 lines."
+Echo "Writer output:"
+Type DH4:logtest-run.txt
