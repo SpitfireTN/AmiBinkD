@@ -1,6 +1,6 @@
 AMIBINKD MANUAL
 Native AmigaOS 3.x port of binkd, the FTN mailer
-Version 10.31
+Version 10.32
 ===============================================================================
 
 Author (Amiga port): Gary "Spitfire" McCulloch
@@ -1164,6 +1164,32 @@ authentication -- is unchanged from upstream binkd.
 ===============================================================================
 18. VERSION HISTORY
 ===============================================================================
+
+v10.32 - A Bad Address Can No Longer Spin Forever
+------------------------------------------------
+
+* A poll process span inside the stale-lock cleanup from 12:00 until a
+  restart at 18:52 -- 2.2 million log lines, 181MB, and no outbound mail for
+  6 hours 52 minutes. Inbound sessions carried on normally throughout, which
+  is exactly why nothing looked broken.
+
+  It looped on "80:774/999@amiganet": the wrong domain for that zone, a node
+  number that does not exist, and a matching lock file on disk. The address
+  came from corruption -- a sibling lock file was found holding a fragment of
+  a LOG LINE where its contents should have been.
+
+  The cleanup has two safety mechanisms, a backoff hold and a give-up
+  counter, and BOTH are stored on the node record. An address that matches no
+  configured node has no record, so both were skipped -- the protections
+  switched themselves off precisely when the input was garbage.
+
+  An unknown address now gets one unlink attempt and is then left alone. A
+  stale lock for a node you do not carry is harmless; nothing polls it.
+
+  This BOUNDS the damage. It does not fix the corruption that produced the
+  bad address -- see KNOWN ISSUES.
+
+
 
 v10.31 - A Log You Can Read Without Editing It
 ---------------------------------------------

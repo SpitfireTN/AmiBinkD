@@ -3,7 +3,7 @@ Uploader:     spitfiretn@gmail.com
 Author:       Gary "Spitfire" McCulloch (Amiga port); binkd by Dima Maloff
               and the binkd project
 Type:         comm/fido
-Version:      10.31
+Version:      10.32
 Architecture: m68k-amigaos
 Distribution: Aminet
 Kurz:         Nativer AmigaOS FTN-Mailer (binkd-Port, ohne ixemul/ixnet)
@@ -140,9 +140,65 @@ BASIC MAIL FLOW
    directory gets picked up and sent on the next poll.
 
 
+
+===============================================================================
+KNOWN ISSUES
+===============================================================================
+
+WRITES CAN LAND IN THE WRONG FILE, UNDER EMULATION AT LEAST.
+
+Rarely -- measured at roughly 0.02% of log lines -- a write intended for one
+file appears in another. It shows up as a line of log text inside a .bsy lock
+file, or as a fragment in the log with no timestamp.
+
+This is NOT new in this version. It predates every release, including the
+ones before it, and was only identified in August 2026. It is reproducible on
+demand with several processes rapidly creating and closing DIFFERENT files at
+once; a test that hammers a SINGLE file never shows it, which is why it went
+unnoticed for so long.
+
+Ruled out as causes: the C library's append mode, seeking, shared stdio state
+between processes, and the lock-file writer itself. The evidence points below
+the mailer, at the host filesystem layer. It has only been observed under
+Amiberry; whether real hardware is affected is unknown.
+
+Consequences you might see:
+  * an occasional garbled line in the log
+  * very rarely, a lock file for an address that does not exist
+
+The second used to be able to spin the stale-lock cleanup forever. As of
+v10.32 it cannot -- that is bounded regardless of the corruption.
+
+
 ===============================================================================
 VERSION HISTORY
 ===============================================================================
+
+v10.32 - A Bad Address Can No Longer Spin Forever
+------------------------------------------------
+
+* A poll process span inside the stale-lock cleanup from 12:00 until a
+  restart at 18:52 -- 2.2 million log lines, 181MB, and no outbound mail for
+  6 hours 52 minutes. Inbound sessions carried on normally throughout, which
+  is exactly why nothing looked broken.
+
+  It looped on "80:774/999@amiganet": the wrong domain for that zone, a node
+  number that does not exist, and a matching lock file on disk. The address
+  came from corruption -- a sibling lock file was found holding a fragment of
+  a LOG LINE where its contents should have been.
+
+  The cleanup has two safety mechanisms, a backoff hold and a give-up
+  counter, and BOTH are stored on the node record. An address that matches no
+  configured node has no record, so both were skipped -- the protections
+  switched themselves off precisely when the input was garbage.
+
+  An unknown address now gets one unlink attempt and is then left alone. A
+  stale lock for a node you do not carry is harmless; nothing polls it.
+
+  This BOUNDS the damage. It does not fix the corruption that produced the
+  bad address -- see KNOWN ISSUES.
+
+
 
 v10.31 - A Log You Can Read Without Editing It
 ---------------------------------------------
