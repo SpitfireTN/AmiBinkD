@@ -28,6 +28,9 @@
 #include "tools.h"
 #include "readdir.h"		       /* for [sys/]utime.h */
 #include "sem.h"
+#ifdef AMIGA
+#include "amiga/dosio.h"
+#endif
 #include "assert.h"
 
 #ifdef WITH_PERL
@@ -330,15 +333,61 @@ void vLog (int lev, char *s, va_list ap)
                                  current_logpath : getenv(BINKD_LOGPATH_ENVIRON);
     if (lev <= current_loglevel && using_logpath)
     {
-      FILE *logfile = 0;
       int i;
+#ifdef AMIGA
+      /* Deliberately NOT fopen/fprintf/fclose -- see amiga/dosio.c.
+       *
+       * libnix hands out every descriptor from ___allocfd, which scans and
+       * realloc()s a shared global table with no locking anywhere in its
+       * file layer. Sessions here are separate Processes in ONE address
+       * space, so two opening files at the same moment can be handed the
+       * same slot and the loser's writes land in the winner's file. Log()
+       * was that layer's heaviest user by far -- one open and one close per
+       * line -- so routing it through dos.library directly removes it from
+       * the race entirely. Measured corruption before this: a .bsy holding
+       * a fragment of a log line, and tests/logtest3.c losing 92 of 1000
+       * lines while writing 4 lock markers into the log. */
+      {
+        char line[1100];
+        int len, wrote = 0;
+
+        len = snprintf (line, sizeof (line),
+                        "%s%c %02d %s %02d:%02d:%02d [%u] %s\n",
+                        first_time ? "\n" : "", ch,
+                        tm.tm_mday, month[tm.tm_mon], tm.tm_hour, tm.tm_min,
+                        tm.tm_sec, (unsigned) PID (), buf);
+        /* snprintf returns the length it WANTED on truncation */
+        if (len < 0)
+          len = 0;
+        else if (len > (int) sizeof (line) - 1)
+          len = (int) sizeof (line) - 1;
+
+        LockSem (LOG_SEM);
+        for (i = 0; i < 10 && len > 0; ++i)
+        {
+          if (i)
+            LOG_RETRY_DELAY ();
+          if (amiga_dos_append (using_logpath, line, len) == 0)
+          {
+            wrote = 1;
+            break;
+          }
+        }
+        if (wrote)
+          first_time = 0;
+        ReleaseSem (LOG_SEM);
+
+        if (!wrote && len > 0)
+          fprintf (stderr, "Cannot append to %s!\n", using_logpath);
+      }
+#else
+      FILE *logfile = 0;
 
       LockSem(LOG_SEM);
-      /* AMIGA: pause between retries. Ten fopen()s back-to-back take
-       * microseconds, so a task holding the log for even a few ms makes
-       * every attempt fail and the message is dropped silently below --
-       * which cost real diagnostic evidence on 2026-08-02 and loses log
-       * lines for sysops whenever sessions overlap. See amiga/msleep.c. */
+      /* pause between retries. Ten fopen()s back-to-back take microseconds,
+       * so a task holding the log for even a few ms makes every attempt fail
+       * and the message is dropped silently below -- which cost real
+       * diagnostic evidence on 2026-08-02. */
       for (i = 0; logfile == 0 && i < 10; ++i)
       {
         if (i)
@@ -357,6 +406,7 @@ void vLog (int lev, char *s, va_list ap)
       else
         fprintf (stderr, "Cannot open %s: %s!\n", using_logpath, strerror (errno));
       ReleaseSem(LOG_SEM);
+#endif
     }
 #ifdef WIN32
 #ifdef BINKD9X
