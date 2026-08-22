@@ -2990,7 +2990,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
    * BBS package. Mailer and protocol only, matching how the remotes
    * identify themselves ("Mystic/1.12A49 binkp/1.0"). */
   msg_sendf (state, M_NUL,
-    "VER AmiBinkd v10.19-" PRTCLNAME "/" PRTCLVER);
+    "VER " AMIBINKD_NAME " " AMIBINKD_VER "-" PRTCLNAME "/" PRTCLVER);
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());

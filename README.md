@@ -10,7 +10,7 @@ ixnet.library.
 
 **v10.32 is the release to run.** Get it from the
 [releases page](https://github.com/SpitfireTN/AmiBinkD/releases) or from the
-BBS file area as `AmiBinkd10_32.lha`.
+BBS file area as `AmiBinkD10_32.lha`.
 
 **If you are on v10.23 or earlier, upgrade — your outbound mail is not being
 delivered.** Every bundle was announced as 0 bytes, because this toolchain's
@@ -88,7 +88,7 @@ locks for you.
 Cross-compiles and links cleanly into a loadable AmigaOS binary
 (`amibinkd`), zero references to ixemul/ixnet anywhere in the binary.
 Tested live on the user's production Amiberry instance (deployed to
-`DH0:AmiBinkd/`, per-network configs `cnet.cfg`/`araknet.cfg`/
+`DH0:AmiBinkD/`, per-network configs `cnet.cfg`/`araknet.cfg`/
 `disciple.cfg`/`fidonet.cfg`/`pinet.cfg`/`retronet.cfg`/`amiganet.cfg`,
 real FTN addresses/domains):
 
@@ -741,10 +741,10 @@ seven times. FidoBlitz, the other Amiga binkp mailer on this system,
 instead accepts `fidoblitz -p -PALL fidoblitz.cfg` - one config listing
 every uplink, one command that polls all of them.
 
-v10.15 adds the same thing here, so `AmiBinkd -p -PALL AmiBinkd:AmiBinkd.cfg`
-polls every network in one run (`rofftn.scr`). `AmiBinkd.cfg` already
+v10.15 adds the same thing here, so `AmiBinkD -p -PALL AmiBinkD:AmiBinkD.cfg`
+polls every network in one run (`rofftn.scr`). `AmiBinkD.cfg` already
 listed all seven domains/addresses/nodes because the **server** side
-(`AmiBinkd -s AmiBinkd.cfg`) has always used the merged config; this makes
+(`AmiBinkD -s AmiBinkD.cfg`) has always used the merged config; this makes
 the client side use the same one file.
 
 Implementation (`poll_all_nodes()` in `ftnnode.c`, dispatched from
@@ -769,7 +769,7 @@ Note the concurrency consequence, which is a config matter rather than a
 code one: with every uplink pollable in a single run, the clientmgr will
 spawn up to `maxclients` outbound sessions at once, and the default is
 100 - i.e. all seven networks simultaneously, where the per-`.scr`
-pattern was strictly one at a time. This BBS's `AmiBinkd.cfg` now sets
+pattern was strictly one at a time. This BBS's `AmiBinkD.cfg` now sets
 `maxclients 2` (what `fidoblitz.cfg` uses for the same node list) plus
 `call-delay 5`, because `do_client()` sleeps `call_delay` - default 60s -
 every time it finds `maxclients` sessions already running, which would
@@ -791,7 +791,7 @@ code:
 2. **`loglevel` and `nolog`**, which binkd already ships — config, not
    code. `loglevel 4` is the useful setting: **level 3 is what emits the
    remote's identity block** (`SYS`/`ZYZ`/`LOC`/`NDL`/`VER`/`TIME`), so at
-   level 2 sessions look anonymous. See `amibinkd-example.cfg` for a
+   level 2 sessions look anonymous. See `AmiBinkD-example.cfg` for a
    commented mask set.
 3. **Five message strings shortened** for 80-column width, measured against
    a real poll: `BEGIN` 120 → 68 columns, `rcvd:` 89 → 71, `Polling` (was
@@ -817,7 +817,7 @@ config. Do not re-introduce message renames for looks.
   before diagnosing a stall.
 
 The mailer no longer identifies itself as part of any one BBS package. It
-reports `VER AmiBinkd v10.18-binkp/1.1`, the same shape remotes use
+reports `VER AmiBinkD v10.18-binkp/1.1`, the same shape remotes use
 (`Mystic/1.12A49 binkp/1.0`). Branding lives in the distribution's text
 files only.
 
@@ -849,7 +849,7 @@ files only.
   - but 19 hours is not proof. If your BBS front-end freezes during or
   after a poll, comment out `conlog` before investigating anything else.
 - Per-node password mismatches surfaced during testing are a config
-  issue (`AmiBinkd.cfg`'s `node` lines vs. what the hub expects), not
+  issue (`AmiBinkD.cfg`'s `node` lines vs. what the hub expects), not
   a code bug - worth double-checking all configured nodes, not
   something this port needs to fix.
 - One tossed fidonet packet (`5d79da03.pkt`) logged `7 msg(s) (0
@@ -900,7 +900,7 @@ binkd is by Dima Maloff and its many contributors; this is a port of
 upstream `binkd/1.1a-115`, not a rewrite. `COPYING` and `HISTORY` are
 upstream's and unmodified.
 
-**Rudi Timmermans (X-TReMe BBS)** wrote the earlier Amiga port, AmiBinkd
+**Rudi Timmermans (X-TReMe BBS)** wrote the earlier Amiga port, AmiBinkD
 v5.00-v9.02 (2012-2013), built against ixemul.library. This port starts
 from clean upstream rather than from his tree, but it carries his name for
 the obvious reason — he did this first, on harder ground, and the log

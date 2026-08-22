@@ -110,14 +110,14 @@ AmiBinkD.info             Workbench icon (AmigaOS 3.5+ for the colour
                           image; older Workbench shows a generic one)
 readme.txt                Short Aminet-style overview
 manual.txt                This document
-amibinkd-example.cfg      Example configuration file
-amibinkd.scr              Example AmigaDOS poll-all driver script
+AmiBinkD-example.cfg      Example configuration file
+AmiBinkD.scr              Example AmigaDOS poll-all driver script
 
-Copy amibinkd-example.cfg to a config name of your choosing before
+Copy AmiBinkD-example.cfg to a config name of your choosing before
 editing it -- see section 07 for whether you want one config file or
 several.
 
-amibinkd.scr is a ready-to-edit "-P ALL" poll script (see sections 07
+AmiBinkD.scr is a ready-to-edit "-P ALL" poll script (see sections 07
 and 09) -- point it at your own config name and schedule it from your
 BBS's event/maintenance system.
 
@@ -541,7 +541,7 @@ for CRAM-MD5 authentication. One line per node you poll or accept
 authenticated mail from.
 
 Keep real passwords out of anything you might publish or share --
-amibinkd-example.cfg ships with placeholder values only.
+AmiBinkD-example.cfg ships with placeholder values only.
 
 
 ===============================================================================
@@ -648,7 +648,7 @@ maintenance script.
 
 A small AmigaDOS Execute script keeps the invocation simple to schedule
 from a menu/event/maintenance command. With "-P ALL" (section 07,
-pattern 1) one script covers every network -- this is amibinkd.scr,
+pattern 1) one script covers every network -- this is AmiBinkD.scr,
 included in the package:
 
   ; Poll every network in the config
@@ -659,7 +659,7 @@ and the parent script that your event/maintenance schedule calls needs
 only one entry:
 
   CD AmiBinkD:
-  Execute amibinkd.scr
+  Execute AmiBinkD.scr
   Wait 1
 
 For the per-network polling pattern (section 07, pattern 3), you write
@@ -967,7 +967,7 @@ Recommended precautions:
 * Don't point inbound/temp-inbound at directories your BBS or OS treats
   as auto-executed or otherwise sensitive
 * Keep your config file's passwords out of anything you publish --
-  amibinkd-example.cfg ships with placeholders only, on purpose
+  AmiBinkD-example.cfg ships with placeholders only, on purpose
 * Review logs regularly for unexpected connection attempts
 * Keep backups
 
@@ -1265,7 +1265,7 @@ v10.26 to v10.29 - Session IDs and a Quieter Lock Race
 v10.25 - Log Lines Stop Being Shredded
 --------------------------------------
 
-* Log lines were being torn apart mid-write when two AmiBinkd instances ran
+* Log lines were being torn apart mid-write when two AmiBinkD instances ran
   at once. A real example:
 
       + 18 Aug 21:07:52 [1081963032] pwd protected session (MD5)
@@ -1278,7 +1278,7 @@ v10.25 - Log Lines Stop Being Shredded
   invocations, so two or three instances write the same file with no lock
   between them.
 
-  Log() now uses an Exec PUBLIC semaphore ("AmiBinkd.log"), which is the
+  Log() now uses an Exec PUBLIC semaphore ("AmiBinkD.log"), which is the
   AmigaOS mechanism for locking across separate programs.
 
   NOTE: the fix only holds once EVERY instance is running v10.25. Replacing
@@ -1297,7 +1297,7 @@ v10.24 - Outbound Mail Actually Leaves The System
 
 * No outbound mail had ever left this port. Every bundle was sent as 0 bytes
   while a valid ZIP sat on disk containing the packet, and no layer logged an
-  error because none had one: the tosser packed correctly and AmiBinkd sent
+  error because none had one: the tosser packed correctly and AmiBinkD sent
   exactly the byte count it was given.
 
   Cause: libnix13's fstat() always reports st_size == 0. It seeks to the
@@ -1539,7 +1539,7 @@ v10.14 - DNS Cache Mechanism Removed For Good
   this codebase supports, with the numeric-address short-circuit kept -
   it's a legitimate optimization on its own), the
   ~/amibinkd-dns/refresh.py script and its systemd --user timer/service
-  are deleted, and the stale DH0:AmiBinkd/dns_cache.txt file is removed.
+  are deleted, and the stale DH0:AmiBinkD/dns_cache.txt file is removed.
   Don't reintroduce this class of workaround without new evidence
   gethostbyname() is broken again - and check whether v10.12's
   private-SocketBase fix is still in place first if it ever does
@@ -1549,8 +1549,8 @@ v10.14 - DNS Cache Mechanism Removed For Good
   earlier notes on this) - the package no longer depends on any
   Reign-of-Fire-specific host-side infrastructure to resolve hostnames.
   The package refresh itself is a separate, not-yet-done task.
-* Deployed to DH0:AmiBinkd/AmiBinkd (v10.13 kept as
-  AmiBinkd.v10.13-backup).
+* Deployed to DH0:AmiBinkD/AmiBinkD (v10.13 kept as
+  AmiBinkD.v10.13-backup).
 
 v10.13 - EXPERIMENTAL: Testing Whether The DNS Cache Is Still Needed
 ---------------------------------------------------------------------------
@@ -1645,8 +1645,8 @@ v10.12 - Real Fix: Private bsdsocket.library Base Per Outbound Session
   afterward, leaving every freshly spawned child (not just outbound
   ones) with a dangling pointer where the new per-Task lookup needed a
   safe NULL default. Now explicitly reset to NULL right after the free.
-* Deployed to DH0:AmiBinkd/AmiBinkd (v10.11 kept as
-  AmiBinkd.v10.11-backup). CONFIRMED LIVE the same day: a poll to
+* Deployed to DH0:AmiBinkD/AmiBinkD (v10.11 kept as
+  AmiBinkD.v10.11-backup). CONFIRMED LIVE the same day: a poll to
   39:902/0@amiganet logged "connected" 1 second after "trying ...",
   then completed a full session and closed cleanly -
   "done (to 39:902/0@amiganet, OK, S/R: 0/2 (0/7773 bytes))" -
@@ -1723,8 +1723,8 @@ v10.10 - Connect-Completion Detection Fixed (No More select() For This)
   counter, not from trusting the emulator to honor a select() timeout -
   so even if this specific fix's own assumptions turn out imperfect,
   it still fails safe (bounded, not an indefinite hang).
-* Deployed to DH0:AmiBinkd/AmiBinkd (v10.9 kept as
-  AmiBinkd.v10.9-backup). Not yet confirmed against a real successful
+* Deployed to DH0:AmiBinkD/AmiBinkD (v10.9 kept as
+  AmiBinkD.v10.9-backup). Not yet confirmed against a real successful
   connection to hub.bottomlessabyss.net specifically (the case that
   exposed this) - watch for a clean "connected" line on the next
   scheduled amiganet poll.
@@ -1766,7 +1766,7 @@ v10.9 - Host-Resolved DNS Cache (gethostbyname() Never Called On AMIGA)
   via a systemd --user timer) parses all deployed .cfg files for
   configured hub hostnames, resolves each one using the host's own
   working resolver, and writes the results to a flat cache file,
-  DH0:AmiBinkd/dns_cache.txt - visible to the Amiga guest instantly,
+  DH0:AmiBinkD/dns_cache.txt - visible to the Amiga guest instantly,
   since Amiberry's HardDrives are host directories with no translation
   layer. rfc2553.c's getaddrinfo() (AMIGA build) now checks for a
   numeric address first (inet_addr() - pure local string parsing, zero
@@ -1822,7 +1822,7 @@ v10.8 - Outbound connect() Timeout (connect-timeout Now Works On AMIGA)
   other platform, and none of this BBS's per-network .cfg files had it
   set -- so the fix by itself would have done nothing until the setting
   was actually turned on. Added "connect-timeout 60" to all 8 deployed
-  configs (AmiBinkd.cfg and all 7 per-network .cfg files) as part of
+  configs (AmiBinkD.cfg and all 7 per-network .cfg files) as part of
   this release. The packaged DH4:AmiBinkD/ example config was NOT
   updated (that whole package has been stale at v10.0 since inception --
   see "Not Done Yet").
@@ -1965,7 +1965,7 @@ v10.4 - n_servers Leak Fix (Inbound "too many servers")
   own equivalent decrement. Every inbound session on this port
   therefore leaked n_servers by +1 forever. Once the count exceeded
   max_servers (100, the binkd default -- not overridden in
-  AmiBinkd.cfg), every subsequent inbound connection was rejected
+  AmiBinkD.cfg), every subsequent inbound connection was rejected
   permanently, since the counter never shrinks on its own. Only a
   process restart clears it -- this cannot self-heal.
 * Fixed by adding AMIGA to server.c's decrement #elif, mirroring
@@ -2133,7 +2133,7 @@ handling, and configuration semantics are upstream binkd's; this port's
 own contribution is the AmigaOS/bsdsocket.library integration layer and
 the real-hardware fixes documented in section 15.
 
-Earlier Amiga port (AmiBinkd v5.00 - v9.02, 2012-2013):
+Earlier Amiga port (AmiBinkD v5.00 - v9.02, 2012-2013):
 
 Rudi Timmermans, X-TReMe BBS
 

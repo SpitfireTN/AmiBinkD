@@ -59,14 +59,14 @@ AmiBinkD                  Compiled AmigaOS executable (m68k, AmigaOS 3.0+)
 AmiBinkD.info             Workbench icon (colour image needs AmigaOS 3.5+)
 readme.txt                Quick overview and install notes
 manual.txt                Full SysOp documentation
-amibinkd-example.cfg      Example configuration file
-amibinkd.scr              Example AmigaDOS poll-all driver script
+AmiBinkD-example.cfg      Example configuration file
+AmiBinkD.scr              Example AmigaDOS poll-all driver script
 
-Copy amibinkd-example.cfg to a name of your choosing (e.g. AmiBinkD.cfg,
+Copy AmiBinkD-example.cfg to a name of your choosing (e.g. AmiBinkD.cfg,
 or one file per network -- see manual.txt section 07) and edit it for
 your system before running.
 
-amibinkd.scr is a ready-to-edit "-P ALL" poll script -- point it at your
+AmiBinkD.scr is a ready-to-edit "-P ALL" poll script -- point it at your
 config name and schedule it from your BBS's event system.
 
 
@@ -108,7 +108,7 @@ QUICK INSTALL
 
    Mail:AmiBinkD/AmiBinkD
 
-2. Copy amibinkd-example.cfg to AmiBinkD.cfg (or a per-network name --
+2. Copy AmiBinkD-example.cfg to AmiBinkD.cfg (or a per-network name --
    see manual.txt section 07) and edit it: your domain(s), your FTN
    address(es), sysname/location/sysop, log path, inbound directories,
    and your node/hub line(s) with the real host, port, and password.
@@ -274,7 +274,7 @@ v10.26 to v10.29 - Session IDs and a Quieter Lock Race
 v10.25 - Log Lines Stop Being Shredded
 --------------------------------------
 
-* Log lines were being torn apart mid-write when two AmiBinkd instances ran
+* Log lines were being torn apart mid-write when two AmiBinkD instances ran
   at once. A real example:
 
       + 18 Aug 21:07:52 [1081963032] pwd protected session (MD5)
@@ -287,7 +287,7 @@ v10.25 - Log Lines Stop Being Shredded
   invocations, so two or three instances write the same file with no lock
   between them.
 
-  Log() now uses an Exec PUBLIC semaphore ("AmiBinkd.log"), which is the
+  Log() now uses an Exec PUBLIC semaphore ("AmiBinkD.log"), which is the
   AmigaOS mechanism for locking across separate programs.
 
   NOTE: the fix only holds once EVERY instance is running v10.25. Replacing
@@ -307,7 +307,7 @@ v10.24 - Outbound Mail Actually Leaves The System
 * THE BIG ONE: no outbound mail had ever left this port. Every bundle went
   out at 0 bytes while a perfectly good ZIP sat on disk holding the packet.
   Nothing logged an error, because no layer had one -- the tosser packed
-  correctly, and AmiBinkd sent exactly the number of bytes it was told the
+  correctly, and AmiBinkD sent exactly the number of bytes it was told the
   file contained.
 
   The cause is in the C library, not in binkd. libnix13's fstat() always
@@ -367,7 +367,7 @@ v10.18 - Inbound Sessions Stop Hanging, Readable Session Log
   pieces silences the log completely.
 
 * AmiBinkD no longer identifies itself as part of any BBS package. The
-  VER string sent to every node you poll is now "AmiBinkd v10.18-binkp/1.1",
+  VER string sent to every node you poll is now "AmiBinkD v10.18-binkp/1.1",
   matching the form other mailers use. It previously named a specific BBS,
   which was wrong for a general AmigaOS mailer.
 
@@ -644,7 +644,7 @@ handling, and configuration semantics are upstream binkd's; this port's
 own work is the AmigaOS/bsdsocket.library integration layer and the
 real-hardware fixes documented in manual.txt.
 
-Earlier Amiga port (AmiBinkd v5.00 - v9.02, 2012-2013):
+Earlier Amiga port (AmiBinkD v5.00 - v9.02, 2012-2013):
 
 Rudi Timmermans, X-TReMe BBS
 

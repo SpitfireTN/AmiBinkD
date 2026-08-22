@@ -1,7 +1,7 @@
-; Reign of Fire BBS AmiBinkd Poll All Script 07/30/2026
+; Reign of Fire BBS AmiBinkD Poll All Script 07/30/2026
 ; SpitfireTN Entertainment - Reign of Fire BBS Group.
 ; call.rofbbs.com:6800 - call@call.rofbbs.com - 423-541-8271 - www.rofbbs.com
-; C-Net/5 AmiBinkd 10.15 - Binkp/1.1 Mailer for Amiga
+; C-Net/5 AmiBinkD 10.15 - Binkp/1.1 Mailer for Amiga
 ;----------------------------------------------------------
 Stack 50000
-AmiBinkd:AmiBinkd -p -PALL AmiBinkd:AmiBinkd.cfg
+AmiBinkD:AmiBinkD -p -PALL AmiBinkD:AmiBinkD.cfg

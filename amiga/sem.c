@@ -143,7 +143,11 @@ int _WaitSem(void *vpSem, int sec) {
  * semaphore under the same name.
  * ------------------------------------------------------------------ */
 
-#define AMIGA_LOG_SEM_NAME "AmiBinkd.log"
+/* Exec FindSemaphore matches by name CASE-SENSITIVELY, so changing this
+ * means an old and a new binary running at once would not share the
+ * lock. Both instances restart together, so that window does not exist
+ * here -- but do not change it casually. */
+#define AMIGA_LOG_SEM_NAME "AmiBinkD.log"
 
 void *amiga_public_log_sem(void)
 {

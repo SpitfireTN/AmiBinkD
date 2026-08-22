@@ -4,15 +4,15 @@
 ;
 ; Build an AmiBinkD release archive for the file section.
 ;
-;   Execute DH4:MakeAmiBinkd 10_32
+;   Execute DH4:MakeAmiBinkD 10_32
 ;
 ; MUST RUN ON THE AMIGA. The Linux host's `lha' is Lhasa, which only
 ; EXTRACTS. Every release since v9 carries the [Amiga] OS byte, so it is
 ; built with DH0:C/lha to stay consistent.
 ;
 ; Expected layout, matching every release since v10.18:
-;     AmiBinkD/  (binary, readme.txt, manual.txt, amibinkd-example.cfg,
-;                 amibinkd.scr, AmiBinkD.info)
+;     AmiBinkD/  (binary, readme.txt, manual.txt, AmiBinkD-example.cfg,
+;                 AmiBinkD.scr, AmiBinkD.info)
 ;     File_ID.DIZ
 ;
 ; 2026-08-21: a build came out FLAT -- all seven files at the archive root,
@@ -29,8 +29,8 @@ Echo ""
 Echo "Drawer contents (must be exactly 6 files, no .PRE_ or .BACKUP):"
 List DH4:AmiBinkD LFORMAT="  %N"
 Echo ""
-Delete UDBase0:NETWORKING/AmiBinkd{VER}.lha QUIET
-lha -r a UDBase0:NETWORKING/AmiBinkd{VER}.lha AmiBinkD File_ID.DIZ
+Delete UDBase0:NETWORKING/AmiBinkD{VER}.lha QUIET
+lha -r a UDBase0:NETWORKING/AmiBinkD{VER}.lha AmiBinkD File_ID.DIZ
 Echo ""
 Echo "Archive contents (each entry should start AmiBinkD/ except File_ID.DIZ):"
-lha l UDBase0:NETWORKING/AmiBinkd{VER}.lha
+lha l UDBase0:NETWORKING/AmiBinkD{VER}.lha

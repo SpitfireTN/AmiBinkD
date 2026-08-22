@@ -54,6 +54,14 @@
 #define PRTCLNAME "binkp"
 #define PRTCLVER "1.1"
 #define MYNAME "binkd"
+
+/* AmiBinkD identifies itself in three places: the BEGIN line, the END line,
+ * and the VER string every peer we poll records about us. Those were three
+ * separate hardcoded literals, and they drifted: VER still said v10.19 while
+ * the binary was v10.33, so fourteen releases of peers logged the wrong
+ * version. One definition now, used by all three. */
+#define AMIBINKD_NAME "AmiBinkD"
+#define AMIBINKD_VER  "v10.33"
 #define MAJOR 1
 #define MINOR 1
 #define SUFFIX "a"
