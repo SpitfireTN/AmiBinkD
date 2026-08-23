@@ -1,6 +1,6 @@
 AMIBINKD MANUAL
 Native AmigaOS 3.x port of binkd, the FTN mailer
-Version 10.32
+Version 10.33
 ===============================================================================
 
 Author (Amiga port): Gary "Spitfire" McCulloch
@@ -1164,6 +1164,50 @@ authentication -- is unchanged from upstream binkd.
 ===============================================================================
 18. VERSION HISTORY
 ===============================================================================
+
+v10.33 - Writes No Longer Land In The Wrong File
+-----------------------------------------------
+
+* Rarely, a write meant for one file appeared in another: log text inside a
+  .bsy lock file, or a fragment in the log with no timestamp. v10.32 shipped
+  with this documented as a known issue. The cause is now found, and the
+  worst of it is fixed.
+
+  It is in the C library, not in this port's logic. Every file descriptor
+  comes from libnix's ___allocfd, which scans a shared global table and grows
+  it with realloc(), reassigning the global pointer. Disassembly of that
+  layer -- open, close, write, read, lseek, fopen, fwrite -- shows ZERO
+  locking calls: no Forbid/Permit, no semaphore, nothing atomic.
+
+  This port runs each session as a separate Process sharing ONE address
+  space, so they all share that table. Two Processes opening files at the
+  same moment can be handed the same slot, and the loser's descriptor then
+  refers to the winner's file.
+
+  Log() was that layer's heaviest user by a wide margin -- one open and one
+  close for EVERY line. It now writes through dos.library directly
+  (Open/Seek/Write/Close on a BPTR) and never touches the descriptor table,
+  so the log can no longer corrupt another file or be corrupted by one.
+
+  Measured: 4,133 log lines across two days with outbound transfers, zero
+  corrupted lines. Before the change the rate was ~0.2%, which would predict
+  eight or nine.
+
+  NOT a complete fix -- the lock-file writer and the transfer paths still use
+  the library's descriptors and can still collide with each other. Those are
+  far lower frequency. See KNOWN ISSUES.
+
+* THE VERSION YOUR PEERS SAW WAS WRONG BY FOURTEEN RELEASES. The name and
+  version were hardcoded in three separate places -- the BEGIN line, the END
+  line, and the VER string sent to every node polled. VER still read
+  "AmiBinkd v10.19" while the binary was v10.33, so every node you polled
+  since v10.19 recorded the wrong version, including under v10.32. There is
+  now one definition used by all three, so they cannot drift apart again.
+
+* The name is normalised to AmiBinkD throughout -- program strings, shipped
+  filenames, configuration and documentation.
+
+
 
 v10.32 - A Bad Address Can No Longer Spin Forever
 ------------------------------------------------

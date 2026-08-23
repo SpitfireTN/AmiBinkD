@@ -3,7 +3,7 @@ Uploader:     spitfiretn@gmail.com
 Author:       Gary "Spitfire" McCulloch (Amiga port); binkd by Dima Maloff
               and the binkd project
 Type:         comm/fido
-Version:      10.32
+Version:      10.33
 Architecture: m68k-amigaos
 Distribution: Aminet
 Kurz:         Nativer AmigaOS FTN-Mailer (binkd-Port, ohne ixemul/ixnet)
@@ -141,38 +141,75 @@ BASIC MAIL FLOW
 
 
 
-===============================================================================
+=========================================================================================================================================================
 KNOWN ISSUES
 ===============================================================================
 
-WRITES CAN LAND IN THE WRONG FILE, UNDER EMULATION AT LEAST.
+Very rarely, a write intended for one file can still appear in another. The
+cause is in the C library: its file-descriptor table is a shared global with
+no locking anywhere in its file layer, and this port runs sessions as
+separate Processes in one address space, so two opening files at once can be
+handed the same slot.
 
-Rarely -- measured at roughly 0.02% of log lines -- a write intended for one
-file appears in another. It shows up as a line of log text inside a .bsy lock
-file, or as a fragment in the log with no timestamp.
+**v10.33 removes the log from that path entirely** -- it was the heaviest
+user by far, one open and one close per line -- and 4,133 lines across two
+days with outbound traffic showed none of the corruption that was previously
+running at about 0.2%.
 
-This is NOT new in this version. It predates every release, including the
-ones before it, and was only identified in August 2026. It is reproducible on
-demand with several processes rapidly creating and closing DIFFERENT files at
-once; a test that hammers a SINGLE file never shows it, which is why it went
-unnoticed for so long.
+What remains is the lock-file writer and the file-transfer paths, which still
+use the library's descriptors. Those operate at a small fraction of the
+frequency, and v10.32's bound on the stale-lock loop means the worst
+consequence -- a poll spinning and stopping outbound mail -- cannot recur.
 
-Ruled out as causes: the C library's append mode, seeking, shared stdio state
-between processes, and the lock-file writer itself. The evidence points below
-the mailer, at the host filesystem layer. It has only been observed under
-Amiberry; whether real hardware is affected is unknown.
+Only ever observed under emulation.
 
-Consequences you might see:
-  * an occasional garbled line in the log
-  * very rarely, a lock file for an address that does not exist
-
-The second used to be able to spin the stale-lock cleanup forever. As of
-v10.32 it cannot -- that is bounded regardless of the corruption.
-
-
-===============================================================================
+=====
 VERSION HISTORY
 ===============================================================================
+
+v10.33 - Writes No Longer Land In The Wrong File
+-----------------------------------------------
+
+* Rarely, a write meant for one file appeared in another: log text inside a
+  .bsy lock file, or a fragment in the log with no timestamp. v10.32 shipped
+  with this documented as a known issue. The cause is now found, and the
+  worst of it is fixed.
+
+  It is in the C library, not in this port's logic. Every file descriptor
+  comes from libnix's ___allocfd, which scans a shared global table and grows
+  it with realloc(), reassigning the global pointer. Disassembly of that
+  layer -- open, close, write, read, lseek, fopen, fwrite -- shows ZERO
+  locking calls: no Forbid/Permit, no semaphore, nothing atomic.
+
+  This port runs each session as a separate Process sharing ONE address
+  space, so they all share that table. Two Processes opening files at the
+  same moment can be handed the same slot, and the loser's descriptor then
+  refers to the winner's file.
+
+  Log() was that layer's heaviest user by a wide margin -- one open and one
+  close for EVERY line. It now writes through dos.library directly
+  (Open/Seek/Write/Close on a BPTR) and never touches the descriptor table,
+  so the log can no longer corrupt another file or be corrupted by one.
+
+  Measured: 4,133 log lines across two days with outbound transfers, zero
+  corrupted lines. Before the change the rate was ~0.2%, which would predict
+  eight or nine.
+
+  NOT a complete fix -- the lock-file writer and the transfer paths still use
+  the library's descriptors and can still collide with each other. Those are
+  far lower frequency. See KNOWN ISSUES.
+
+* THE VERSION YOUR PEERS SAW WAS WRONG BY FOURTEEN RELEASES. The name and
+  version were hardcoded in three separate places -- the BEGIN line, the END
+  line, and the VER string sent to every node polled. VER still read
+  "AmiBinkd v10.19" while the binary was v10.33, so every node you polled
+  since v10.19 recorded the wrong version, including under v10.32. There is
+  now one definition used by all three, so they cannot drift apart again.
+
+* The name is normalised to AmiBinkD throughout -- program strings, shipped
+  filenames, configuration and documentation.
+
+
 
 v10.32 - A Bad Address Can No Longer Spin Forever
 ------------------------------------------------
