@@ -141,7 +141,29 @@ BASIC MAIL FLOW
 
 
 
-=========================================================================================================================================================
+COMPANION TOOL
+===============================================================================
+
+AmiBinkD moves the mail. It does not process TIC files -- the file-echo
+announcements that arrive alongside your packets.
+
+RoFTIC handles that half: TIC processing, nodelist detection and
+installation, archived-nodelist extraction, and a TrapList run when a
+nodelist actually changed. It is a separate program with its own release
+cycle, on Aminet as RoFTICv3_2c.lha.
+
+Be aware of its scope: RoFTIC is written around C-Net/5's file base, and
+its file-area destinations map into that layout. Every path is a config
+keyword, so pointing it elsewhere is a matter of editing roftic.cfg -- but
+it has only been run in anger against C-Net/5, and the documentation is
+written from that angle. If you run another BBS, treat it as a starting
+point rather than a drop-in.
+
+Neither tool requires the other. AmiBinkD works with any tosser and any
+TIC processor; RoFTIC works with whatever mailer put the files there.
+
+
+===============================================================================
 KNOWN ISSUES
 ===============================================================================
 
@@ -163,7 +185,7 @@ consequence -- a poll spinning and stopping outbound mail -- cannot recur.
 
 Only ever observed under emulation.
 
-=====
+===============================================================================
 VERSION HISTORY
 ===============================================================================
 
