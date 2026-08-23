@@ -6,51 +6,43 @@ ixnet.library.
 
 ---
 
-## Current release: v10.32 — recommended
+## Current release: v10.33 — recommended
 
-**v10.32 is the release to run.** Get it from the
+**v10.33 is the release to run.** Get it from the
 [releases page](https://github.com/SpitfireTN/AmiBinkD/releases) or from the
-BBS file area as `AmiBinkD10_32.lha`.
+BBS file area as `AmiBinkD10_33.lha`.
 
 **If you are on v10.23 or earlier, upgrade — your outbound mail is not being
 delivered.** Every bundle was announced as 0 bytes, because this toolchain's
 `fstat()` reports `st_size` as 0 while returning success. Sessions look
 completely normal in the log. Fixed in v10.24 (`amiga/fstat.c`).
 
-Since v10.18, in the order they matter:
+**If you are on v10.19 through v10.32, your peers have you logged under the
+wrong version.** The `VER` string sent to every node was a separate hardcoded
+literal from the one in the startup banner, and it was never updated — it
+still read v10.19 while the binary was v10.33. Fixed in v10.33; there is now
+one definition behind all three places the version appears.
 
-- **v10.24** — outbound mail actually sends. See above.
-- **v10.23** — socket errors report the real `errno`. bsdsocket.library never
-  writes to `errno` unless handed a pointer via `SBTC_ERRNOPTR`, so every
-  socket error used to echo whatever last touched it.
-- **v10.25** — log lines stop being shredded when instances overlap. `Log()`
-  took a private semaphore; this port runs separate programs, so it needs a
-  public one.
-- **v10.26** — a distinct id per session, so concurrent sessions can be told
-  apart in the log.
-- **v10.30/v10.31** — one line per inbound connection carrying the port, and
-  a loglevel 4 that reads without `nolog` masks. The sample config no longer
-  ships them because it no longer needs them.
-- **v10.32** — an address matching no configured node can no longer spin the
-  stale-lock cleanup forever. It wrote 2.2 million log lines here and stopped
-  outbound mail for nearly seven hours while inbound carried on normally.
+### What changed since v10.32
 
-### Known issue
+- **Writes no longer land in the wrong file.** Rarely — about 0.2% of log
+  lines — a write meant for one file appeared in another. The cause is
+  libnix's file-descriptor table: `___allocfd` scans and `realloc()`s a
+  shared global with no locking anywhere in its file layer (verified across
+  `open`, `close`, `write`, `read`, `lseek`, `fopen`, `fwrite`). This port
+  runs sessions as separate Processes in one address space, so two opening
+  files at once can be handed the same slot. `Log()` was the heaviest user by
+  far — one open and one close per line — and now writes through dos.library
+  directly, never touching that table. Measured after: 4,133 log lines over
+  two days including outbound transfers, zero corrupted.
+- **The name is AmiBinkD everywhere** — program strings, filenames, config
+  and docs.
 
-Rarely — around 0.02% of log lines — a write intended for one file appears in
-another: log text inside a `.bsy`, or a fragment in the log with no
-timestamp. **This is not new in v10.32; it predates every release.**
-
-Root cause, found 2026-08-21: libnix hands out descriptors from `___allocfd`,
-which scans and `realloc()`s a shared global table (`___stdfiledes`) with no
-locking anywhere in its file layer — verified across `open`, `close`,
-`write`, `read`, `lseek`, `fopen`, `fwrite`. This port runs sessions as
-separate Processes in one address space, so two opening files at once can be
-handed the same slot, and the loser writes into the winner's file.
-
-Only observed under emulation. v10.32 bounds the worst consequence. A fix is
-in progress.
-
+Not a complete fix: the lock-file writer and the transfer paths still use the
+library's descriptors and can still collide with each other, at a small
+fraction of the frequency. v10.32's bound on the stale-lock loop means the
+worst consequence — a poll spinning and stopping outbound mail — cannot recur
+regardless. Only ever observed under emulation.
 
 ### The version jump: v10.16 and v10.17 were never released
 
