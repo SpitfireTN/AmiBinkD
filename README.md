@@ -898,3 +898,14 @@ from clean upstream rather than from his tree, but it carries his name for
 the obvious reason — he did this first, on harder ground, and the log
 format his v9.01 produced is close enough to this one that the two are
 recognisably the same program a decade apart.
+
+## Licence
+
+GPL-2.0-or-later, inherited from binkd. This is a port of
+[pgul/binkd](https://github.com/pgul/binkd), whose every source file carries
+the GNU General Public License v2 header, so this work cannot be released
+under anything more permissive. The full text is in `LICENSE` (and `COPYING`,
+as upstream ships it).
+
+binkd is copyright Dima Maloff and others. The AmigaOS port is by
+Gary "Spitfire" McCulloch.
