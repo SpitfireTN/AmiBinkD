@@ -26,6 +26,12 @@
 #include "readcfg.h"
 #include "common.h"
 #include "tools.h"
+
+#ifdef AMIGA
+#include <proto/exec.h>
+#include <proto/locale.h>
+#include <libraries/locale.h>
+#endif
 #include "readdir.h"		       /* for [sys/]utime.h */
 #include "sem.h"
 #ifdef AMIGA
@@ -1047,12 +1053,83 @@ int pkt_setaddr(unsigned char *raw,
   return 1;
 }
 
+#ifdef AMIGA
+/*
+ * Where AmigaOS actually keeps the timezone.
+ *
+ * The generic autodetect below compares gmtime() against localtime() and
+ * takes the difference. That cannot work here: AmigaOS has no TZ database,
+ * and libnix's localtime() is literally gmtime(t - *__timezone) with
+ * __timezone left at zero (disassembled to confirm -- localtime.o subtracts
+ * the long that ___timezone points at and calls gmtime). So the two agree
+ * exactly, the difference is 0, and we announce local wall-clock time
+ * labelled "+0000" -- telling every peer we sit on the Greenwich meridian
+ * wherever in the world we actually are.
+ *
+ * locale.library is the OS-standard answer: the user picks their zone in
+ * Locale prefs and every localised program reads it from there. No binkd
+ * config keyword needed, and it is correct out of the box in any country.
+ *
+ * Sign: loc_GMTOffset is the minutes to ADD to local time to reach GMT, so
+ * it runs positive WEST of Greenwich. We report minutes east, so negate it.
+ * (US Eastern in summer: loc_GMTOffset 240, we report -240 -> "-0400".)
+ *
+ * The library base is opened once and deliberately never closed. AmigaOS
+ * Processes share one address space, so a base that is opened and closed
+ * around each use is shared mutable state that a concurrent session can
+ * pull out from under us -- the same class of bug as the libnix descriptor
+ * table. Opening under Forbid() makes the first-call race harmless.
+ */
+struct LocaleBase *LocaleBase = NULL;
+
+static int amiga_tz_minutes (int *found)
+{
+  struct Locale *loc;
+  int off = 0;
+
+  *found = 0;
+
+  if (LocaleBase == NULL)
+  {
+    Forbid ();
+    if (LocaleBase == NULL)
+      LocaleBase = (struct LocaleBase *) OpenLibrary ((CONST_STRPTR) "locale.library", 38);
+    Permit ();
+  }
+  if (LocaleBase == NULL)
+    return 0;                   /* pre-2.0, or locale.library unavailable */
+
+  if ((loc = OpenLocale (NULL)) != NULL)
+  {
+    off = -(int) loc->loc_GMTOffset;
+    *found = 1;
+    CloseLocale (loc);
+  }
+  return off;
+}
+#endif
+
 int tz_off(time_t t, int tzoff)
 {
   struct tm tm;
   time_t gt;
 
   if (tzoff != -1) return tzoff/60;
+
+#ifdef AMIGA
+  {
+    int found;
+    int off = amiga_tz_minutes (&found);
+
+    /* Only trust a locale that actually names an offset. If the user has
+     * never opened Locale prefs, loc_GMTOffset is 0 and that is
+     * indistinguishable from a genuine GMT setting -- but reporting +0000
+     * is exactly what we did before, so this is never worse. */
+    if (found)
+      return off;
+  }
+#endif
+
   safe_gmtime (&t, &tm);
   tm.tm_isdst = 0;
   gt = mktime(&tm);

@@ -1,6 +1,6 @@
 AMIBINKD MANUAL
 Native AmigaOS 3.x port of binkd, the FTN mailer
-Version 10.33
+Version 10.34
 ===============================================================================
 
 Author (Amiga port): Gary "Spitfire" McCulloch
@@ -1410,8 +1410,8 @@ v10.18 - Inbound Sessions Stop Hanging
 v10.17 - One Hung Session No Longer Takes The Others With It (unreleased)
 ---------------------------------------------------------------------------
 
-* Never released; superseded by v10.18. Refreshing .bsy datestamps happens on every pass
-  of the protocol main loop, and that work was done while holding a
+* Never released; superseded by v10.18. Refreshing .bsy datestamps happens
+  on every pass of the protocol main loop, and that work was done holding a
   single global lock across file I/O -- so one session blocked in there
   pinned the lock and every other concurrent session piled up behind it,
   a pile-up that fed itself. v10.17 removed the cascade; v10.18 removed

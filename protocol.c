@@ -2986,11 +2986,21 @@ static int banner (STATE *state, BINKD_CONFIG *config)
 
 #ifdef AMIGA
   /* No BBS name here: this is what every node we poll records about us,
-   * and AmiBinkd is a general AmigaOS mailer -- it is not tied to any one
-   * BBS package. Mailer and protocol only, matching how the remotes
-   * identify themselves ("Mystic/1.12A49 binkp/1.0"). */
+   * and AmiBinkD is a general AmigaOS mailer -- it is not tied to any one
+   * BBS package. Mailer, OS and protocol only, built exactly like the
+   * generic branch below so we match what the rest of the network sends:
+   *
+   *   AmiBinkD/10.34/Amiga binkp/1.1     <- us (version from AMIBINKD_VERNUM)
+   *   binkd/1.1a-115/Linux binkp/1.1     <- stock binkd
+   *   Mystic/1.12A49 binkp/1.0           <- Mystic (no OS field)
+   *
+   * The OS field comes from get_os_string(), which returns "/" OS; the
+   * Amiga build defines OS="Amiga" in the Makefile. Until v10.33 this
+   * sent "AmiBinkD v10.33-binkp/1.1", which named no OS and glued the
+   * protocol token on with a hyphen instead of a space. */
   msg_sendf (state, M_NUL,
-    "VER " AMIBINKD_NAME " " AMIBINKD_VER "-" PRTCLNAME "/" PRTCLVER);
+    "VER " AMIBINKD_NAME "/" AMIBINKD_VERNUM "%s " PRTCLNAME "/" PRTCLVER,
+    get_os_string ());
 #else
   msg_sendf (state, M_NUL,
     "VER " MYNAME "/" MYVER "%s " PRTCLNAME "/" PRTCLVER, get_os_string ());

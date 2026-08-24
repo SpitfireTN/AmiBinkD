@@ -3,13 +3,13 @@ Uploader:     spitfiretn@gmail.com
 Author:       Gary "Spitfire" McCulloch (Amiga port); binkd by Dima Maloff
               and the binkd project
 Type:         comm/fido
-Version:      10.33
+Version:      10.34
 Architecture: m68k-amigaos
 Distribution: Aminet
 Kurz:         Nativer AmigaOS FTN-Mailer (binkd-Port, ohne ixemul/ixnet)
 Requires:     bsdsocket.library (Roadshow/AmiTCP/Amiberry bsdsocket_emu),
               any FTN-aware Amiga BBS engine (developed against
-              C-Net/5 Amiga Pro)
+              C-Net/5 Amiga Pro). IPv4 only -- see readme.txt
 
 AMIBINKD
 Native AmigaOS 3.x port of binkd, the FTN mailer
@@ -85,6 +85,44 @@ REQUIREMENTS
 AmiBinkD is a standalone compiled executable. It has no ixemul.library or
 ixnet.library dependency of any kind -- confirmed via string search on
 the built binary.
+
+
+IPV4 AND IPV6
+===============================================================================
+
+AmiBinkD is IPv4-only, and this is a limit of AmigaOS itself rather than a
+missing build option.
+
+The AmigaOS TCP/IP API has no IPv6 in it. Roadshow's sys/socket.h -- the
+official AmigaOS 3.2 networking headers -- defines 26 address families,
+ending at AF_SIP 24 / AF_MAX 26. There is no AF_INET6, no sockaddr_in6, no
+in6_addr and no IPPROTO_IPV6 anywhere in the netinclude tree. That is a
+pre-IPv6 BSD snapshot, and bsdsocket.library has no v6 protocol behind it.
+AmiTCP and Miami are IPv4-only as well, and Amiberry's bsdsocket_emu adds
+nothing here either.
+
+So every IPv6 branch inside binkd's own sources compiles out on this
+platform. Upstream binkd speaks IPv6 on PC because the host stack hands it
+AF_INET6 sockets; the Amiga has none to hand over. Defining the constants by
+hand would not help -- socket() would simply return EAFNOSUPPORT.
+
+If you need IPv6 callers to reach your board, put a small v6-to-v4 relay in
+front of the BinkP port. On a Linux host running Amiberry, one socat process
+is enough:
+
+    socat TCP6-LISTEN:24554,ipv6only=1,fork,reuseaddr TCP4:127.0.0.1:24554
+
+Verified working: an IPv6 caller completes the full BinkP greeting and
+session through it.
+
+One thing to know before you rely on it. The relay is what connects to
+AmiBinkD, so the log records every IPv6 caller as coming from 127.0.0.1 --
+the real address is not recoverable from AmiBinkD's own log. Two points
+follow. First, do not use address-based node restrictions on a port reached
+this way; BinkP's CRAM-MD5 password authentication is unaffected and remains
+your real access control. Second, run the relay with logging turned on so
+the peer address is recorded somewhere -- socat's -d -d writes it at NOTICE
+level, which under systemd lands in the journal.
 
 
 CONCURRENCY
@@ -188,6 +226,87 @@ Only ever observed under emulation.
 ===============================================================================
 VERSION HISTORY
 ===============================================================================
+
+v10.34 - Says Who And What It Runs On
+-------------------------------------
+
+* The VER string sent to every node now follows the convention the rest of
+  the network uses -- mailer, version, operating system, then protocol:
+
+      AmiBinkD/10.34/Amiga binkp/1.1
+
+  Compare what arrives here from other systems:
+
+      binkd/1.1a-115/Linux binkp/1.1
+      Mystic/1.12A49 binkp/1.0
+
+  Through v10.33 this was sent as "AmiBinkD v10.33-binkp/1.1", which named
+  no operating system, used a space where the convention uses a slash, and
+  attached the protocol token with a hyphen instead of a space. binkd's own
+  parser searches for "binkp/" and so was never troubled by it, but a
+  stricter one could read "v10.33-binkp/1.1" as a single token, and nothing
+  told the remote SysOp what the mailer was running on. Every other mailer
+  reports its platform; there is no reason an Amiga should be the one that
+  stays quiet about it.
+
+* The version number now has one definition in the source instead of two.
+  v10.33 collapsed three hardcoded copies into one and this splits that
+  cleanly into the bare number the VER string wants and the v-prefixed form
+  the log lines use, both derived from the same constant. Version drift of
+  this kind is what left the VER string reporting v10.19 for fourteen
+  releases.
+
+* The time zone announced to peers is now read from AmigaOS instead of
+  guessed. Every mailer sends its local time and UTC offset during the
+  handshake; through v10.33 AmiBinkD sent the right wall-clock time with
+  the offset "+0000" attached, telling every node it polled that it sat on
+  the Greenwich meridian no matter where in the world it actually was.
+
+  binkd normally works the offset out by comparing gmtime() against
+  localtime(). That cannot work on this platform: AmigaOS has no TZ
+  database, and the C runtime's localtime() is gmtime(t - __timezone) with
+  __timezone never set, so the two agree exactly and the difference comes
+  out as zero.
+
+  AmiBinkD now asks locale.library, which is where AmigaOS actually keeps
+  the answer -- the zone you pick in Prefs/Locale, the same setting every
+  other localised program reads. Nothing to configure in AmiBinkD.cfg and
+  it is correct in any country.
+
+  IF YOUR OFFSET STILL SHOWS +0000: open Prefs/Locale, set your time zone,
+  and Save. An Amiga that has never had Locale prefs saved reports a GMT
+  offset of zero, and AmiBinkD cannot tell that apart from a system
+  genuinely running on GMT. Setting it once fixes it permanently.
+
+  DAYLIGHT SAVING IS MANUAL. AmigaOS has no concept of it anywhere --
+  loc_Flags is documented "always 0 for now" and the locale autodocs never
+  mention it. Locale prefs holds one fixed offset, and the zone entries are
+  STANDARD time. So if you are in a region that observes summer time, the
+  offset AmiBinkD reports is an hour off for half the year unless you
+  change it.
+
+  Worked example. Prefs/Locale set to Eastern stores a GMT offset of 300,
+  so AmiBinkD announces -0500. That is correct in winter and an hour out
+  from mid-March to early November, when the same clock is really -0400.
+  Two ways to handle it, both needing a change twice a year:
+
+    - pick the zone entry one hour off during summer time, or
+    - set "tzoff" in your config, which overrides Locale entirely:
+      "tzoff -4h" for US Eastern summer time, "tzoff -5h" for winter.
+
+  The second is usually tidier, since it leaves the system-wide Locale
+  setting alone for every other program on the machine.
+
+  This is a property of the operating system, not of AmiBinkD -- no Amiga
+  program can do better without a timezone database the OS does not have.
+
+* Documented that AmiBinkD is IPv4-only, why that is a property of AmigaOS
+  rather than of this port, and how to put a v6-to-v4 relay in front of the
+  BinkP port if you need IPv6 callers to reach you. See the IPV4 AND IPV6
+  section in this file. No code change -- the behaviour was always this,
+  it simply was not written down, and a SysOp testing IPv6 had no way to
+  tell a platform limit from a bug.
+
 
 v10.33 - Writes No Longer Land In The Wrong File
 -----------------------------------------------
