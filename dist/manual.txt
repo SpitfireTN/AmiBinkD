@@ -45,6 +45,7 @@ TABLE OF CONTENTS
 18. Version History
 19. Disclaimer
 20. Credits and Contact
+21. Licence
 
 
 ===============================================================================
@@ -112,6 +113,8 @@ readme.txt                Short Aminet-style overview
 manual.txt                This document
 AmiBinkD-example.cfg      Example configuration file
 AmiBinkD.scr              Example AmigaDOS poll-all driver script
+COPYING                   The GNU General Public License, version 2
+                          (see section 21)
 
 Copy AmiBinkD-example.cfg to a config name of your choosing before
 editing it -- see section 07 for whether you want one config file or
@@ -2213,6 +2216,69 @@ Gary "Spitfire" McCulloch
 Networks tested against:
 
 AmigaNet, ArakNet, CommodoreNet, DiscipleNet, FidoNet, PiNet, RetroNet
+
+===============================================================================
+21. LICENCE
+===============================================================================
+
+AmiBinkD is free software, distributed under the GNU General Public
+License, version 2 or (at your option) any later version. This is not a
+choice this port made -- every source file of upstream binkd carries the
+GPL header, so any derivative of it, this port included, is under the
+same terms.
+
+The full licence text ships in the archive as COPYING. It is the
+standard, unmodified FSF text.
+
+WHAT THIS MEANS FOR YOU AS A SYSOP
+
+Running it:        No conditions at all. Use it on as many systems as
+                   you like, for anything, commercial or not. The GPL
+                   places no restrictions on running a program.
+
+Passing it on:     Allowed and encouraged -- put it in your file area,
+                   hand it to another sysop, include it in a BBS
+                   distribution. Keep COPYING with it, and make the
+                   source available to whoever you gave it to (pointing
+                   them at the repository below is enough).
+
+Changing it:       Allowed. If you distribute your modified version,
+                   mark it as changed, release your changes under the
+                   GPL as well, and do not present it as this release.
+
+Bundling it:       Allowed, including alongside closed-source software,
+                   as long as AmiBinkD itself stays under the GPL and
+                   its source stays available. Calling it from your own
+                   BBS's scripts or event system does not make your BBS
+                   a derivative work.
+
+Warranty:          None. See section 19, and sections 11 and 12 of
+                   COPYING, which are the legally operative version of
+                   the same statement.
+
+SOURCE CODE
+
+The complete source, including the AmigaOS work that does not exist
+upstream, is at:
+
+  https://github.com/SpitfireTN/AmiBinkD
+
+Releases are tagged: the tag v10.34 is the exact tree this executable
+was built from. If you cannot reach GitHub, write to
+spitfiretn@gmail.com and the source will be sent to you.
+
+Upstream binkd is at https://github.com/pgul/binkd -- report protocol
+and mail-handling questions there if they are not Amiga-specific, and
+Amiga-specific ones here.
+
+COPYRIGHT
+
+  binkd            (C) 1996-2015 Dima Maloff 5047/13 and others
+  AmigaOS port     (C) 2026 Gary "Spitfire" McCulloch
+
+The earlier Amiga port by Rudi Timmermans (v5.00 - v9.02) is credited in
+section 20. This release shares no code with it.
+
 
 ===============================================================================
 END OF MANUAL.TXT                                      SpitfireTN Entertainment

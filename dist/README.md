@@ -14,6 +14,7 @@ protection the source does.
 | `AmiBinkD-example.cfg` | starting config, placeholders throughout |
 | `AmiBinkD.scr` | sample AmigaDOS startup script |
 | `AmiBinkD.info` | Workbench icon, **drawn by hand — binary, do not touch** |
+| `COPYING` | GPL-2.0 text, verbatim copy of `../LICENSE` — **shipping the binary without this is a licence violation** |
 | `File_ID.DIZ` | BBS file-listing description |
 | `MakeAmiBinkD` | builds the `.lha`; takes the version as an argument |
 
@@ -31,8 +32,9 @@ elsewhere would break that continuity.
 
 The version appears in more places than the binary. Check each:
 
-    readme.txt      version references + the change list
-    manual.txt      version references
+    readme.txt      version references + the change list, and the
+                    tag named in the LICENCE section's SOURCE CODE part
+    manual.txt      version references, and the tag named in section 21
     File_ID.DIZ     the version on line 1
 
 The binary itself gets its version from `MYVER` in the source, so a stale

@@ -61,6 +61,7 @@ readme.txt                Quick overview and install notes
 manual.txt                Full SysOp documentation
 AmiBinkD-example.cfg      Example configuration file
 AmiBinkD.scr              Example AmigaDOS poll-all driver script
+COPYING                   The GNU General Public License, version 2
 
 Copy AmiBinkD-example.cfg to a name of your choosing (e.g. AmiBinkD.cfg,
 or one file per network -- see manual.txt section 07) and edit it for
@@ -791,6 +792,53 @@ Recommended precautions:
   BBS treats as directly executable or auto-processed without review.
 * Review your log regularly.
 * Keep backups.
+
+
+LICENCE
+===============================================================================
+
+AmiBinkD is free software. It is a port of binkd, every source file of
+which carries the GNU General Public License header, so AmiBinkD is
+distributed under the same terms:
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+  General Public License for more details.
+
+The complete licence text is in COPYING, included in this archive. Read
+it before you redistribute AmiBinkD, modify it, or bundle it with a BBS
+package -- it permits all three, and it has conditions.
+
+SOURCE CODE
+
+The GPL requires that anyone who receives this binary can get the source
+it was built from. The complete source for this release, including the
+AmigaOS-specific work that is not in upstream binkd, is at:
+
+  https://github.com/SpitfireTN/AmiBinkD
+
+Each release is tagged, so v10.34 is the exact tree this executable was
+compiled from. If you cannot reach GitHub, write to
+spitfiretn@gmail.com and a copy of the source will be sent to you.
+
+Upstream binkd, from which this is ported, is at:
+
+  https://github.com/pgul/binkd
+
+Copyright:
+
+  binkd            (C) 1996-2015 Dima Maloff 5047/13 and others
+  AmigaOS port     (C) 2026 Gary "Spitfire" McCulloch
+
+AmiBinkD is free of charge, and free in the GPL's sense as well: you
+may pass it on, put it in your own BBS's file area, or ship it with a
+package, provided this licence and the source stay available with it.
 
 
 DISCLAIMER

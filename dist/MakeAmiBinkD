@@ -26,7 +26,7 @@ CD DH4:
 Echo "Where (must be DH4:):"
 CD
 Echo ""
-Echo "Drawer contents (must be exactly 6 files, no .PRE_ or .BACKUP):"
+Echo "Drawer contents (must be exactly 7 files, no .PRE_ or .BACKUP):"
 List DH4:AmiBinkD LFORMAT="  %N"
 Echo ""
 Delete UDBase0:NETWORKING/AmiBinkD{VER}.lha QUIET

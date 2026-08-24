@@ -10,4 +10,5 @@ dist/*.txt        text eol=lf
 dist/*.cfg        text eol=lf
 dist/*.scr        text eol=lf
 dist/File_ID.DIZ  text eol=lf
-dist/MakeAmiBinkd text eol=lf
+dist/MakeAmiBinkD text eol=lf
+dist/COPYING      text eol=lf
