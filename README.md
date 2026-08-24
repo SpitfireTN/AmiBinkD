@@ -6,11 +6,11 @@ ixnet.library.
 
 ---
 
-## Current release: v10.33 — recommended
+## Current release: v10.34 — recommended
 
-**v10.33 is the release to run.** Get it from the
+**v10.34 is the release to run.** Get it from the
 [releases page](https://github.com/SpitfireTN/AmiBinkD/releases) or from the
-BBS file area as `AmiBinkD10_33.lha`.
+BBS file area as `AmiBinkD10_34.lha`.
 
 **If you are on v10.23 or earlier, upgrade — your outbound mail is not being
 delivered.** Every bundle was announced as 0 bytes, because this toolchain's
@@ -21,7 +21,44 @@ completely normal in the log. Fixed in v10.24 (`amiga/fstat.c`).
 wrong version.** The `VER` string sent to every node was a separate hardcoded
 literal from the one in the startup banner, and it was never updated — it
 still read v10.19 while the binary was v10.33. Fixed in v10.33; there is now
-one definition behind all three places the version appears.
+one definition behind all three places the version appears. v10.34 also
+corrects the format of that string — see below.
+
+### What changed since v10.33
+
+No protocol or transfer changes. Two things AmiBinkD had been reporting
+wrongly to every peer, both visible in the binkp handshake.
+
+- **It now says what it is and what it runs on.** The `VER` string follows
+  the convention everything else uses — mailer, version, OS, then protocol:
+  `AmiBinkD/10.34/Amiga binkp/1.1`. Through v10.33 it sent
+  `AmiBinkD v10.33-binkp/1.1`, which named no operating system and attached
+  the protocol token with a hyphen. Compare `binkd/1.1a-115/Linux binkp/1.1`
+  and `Mystic/1.12A49 binkp/1.0`, which is what arrives here from everyone
+  else.
+
+- **It now knows what time zone it is in.** The handshake's `TIME` field was
+  sending the right wall-clock time with `+0000` attached — telling every
+  node it polled that it sat on the Greenwich meridian. binkd normally
+  derives the offset by comparing `gmtime()` against `localtime()`, which
+  cannot work here: AmigaOS has no timezone database, and the C runtime's
+  `localtime()` is `gmtime(t - __timezone)` with `__timezone` never set, so
+  the two agree exactly and the difference is zero. It now reads
+  `loc_GMTOffset` from `locale.library` — the zone you set in Prefs/Locale.
+  Nothing to configure, correct in any country.
+
+  If your offset still shows `+0000`, open Prefs/Locale, set your zone and
+  press **Save** (not Use — Use only writes to `ENV:`, which is RAM).
+  Daylight saving is manual: AmigaOS has no concept of it, so Locale holds
+  standard time. The `tzoff` config keyword overrides Locale if you would
+  rather pin it.
+
+- **Documented that AmiBinkD is IPv4-only** — and why that is a property of
+  AmigaOS rather than of this port. Roadshow's `sys/socket.h` defines 26
+  address families ending at `AF_MAX 26`; there is no `AF_INET6` or
+  `sockaddr_in6` anywhere, and AmiTCP and Miami are IPv4-only as well. The
+  readme carries a v6-to-v4 relay recipe for reaching IPv6 callers, with its
+  caveats. Documentation only — **AmiBinkD is not IPv6 capable.**
 
 ### What changed since v10.32
 
