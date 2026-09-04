@@ -3,7 +3,7 @@ Uploader:     spitfiretn@gmail.com
 Author:       Gary "Spitfire" McCulloch (Amiga port); binkd by Dima Maloff
               and the binkd project
 Type:         comm/fido
-Version:      10.34
+Version:      10.35
 Architecture: m68k-amigaos
 Distribution: Aminet
 Kurz:         Nativer AmigaOS FTN-Mailer (binkd-Port, ohne ixemul/ixnet)
@@ -227,6 +227,42 @@ Only ever observed under emulation.
 ===============================================================================
 VERSION HISTORY
 ===============================================================================
+
+v10.35 - Polls That Do Not Stall
+--------------------------------
+
+* A poll could stop dead partway through a session and stay stopped for
+  anything from ten minutes to two hours, ending only when the node at the
+  far end gave up waiting. The process stayed alive throughout and the log
+  simply went quiet, so nothing in it pointed at a cause.
+
+  On C-Net/5 this was worse than a lost poll. C-Net runs its polls from the
+  event scheduler, so a session that will not finish holds the scheduler
+  with it: on 30 August a stalled 13:30 poll took the local console login
+  down too, and the machine had to be restarted to get it back.
+
+  The cause was the mailer doing housekeeping on its own lock. Partway
+  through every handshake it scans the outbound queue, and that scan tidies
+  away stale .bsy and .csy lock files. The locks it examines are those of
+  the node at the other end of the call -- which, during a live session, is
+  exactly the node whose lock this session created when it dialled. It was
+  finding its own lock, judging it old, and going to the filesystem to deal
+  with it while the session sat on an unread socket.
+
+  The giveaway was that stall length tracked the kill_old_bsy setting
+  precisely: about two hours while that was set to 2h, then about fifteen
+  minutes three times running once it was lowered to 15m.
+
+  A lock a live session holds is by definition not stale, so there is
+  nothing there to clean up. It is now skipped without touching the
+  filesystem at all. Measured before the fix: nine stalls in 243 scans over
+  three days. After it, across five days of live polling, thirty-six polls
+  began and thirty-six ended.
+
+* Nothing to configure. kill_old_bsy keeps whatever value you have given
+  it, and now applies only to locks no running session owns -- which is
+  what it was always meant to mean.
+
 
 v10.34 - Says Who And What It Runs On
 -------------------------------------
@@ -823,7 +859,7 @@ AmigaOS-specific work that is not in upstream binkd, is at:
 
   https://github.com/SpitfireTN/AmiBinkD
 
-Each release is tagged, so v10.34 is the exact tree this executable was
+Each release is tagged, so v10.35 is the exact tree this executable was
 compiled from. If you cannot reach GitHub, write to
 spitfiretn@gmail.com and a copy of the source will be sent to you.
 

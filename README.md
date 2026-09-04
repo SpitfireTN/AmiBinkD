@@ -6,11 +6,11 @@ ixnet.library.
 
 ---
 
-## Current release: v10.34 — recommended
+## Current release: v10.35 — recommended
 
-**v10.34 is the release to run.** Get it from the
+**v10.35 is the release to run.** Get it from the
 [releases page](https://github.com/SpitfireTN/AmiBinkD/releases) or from the
-BBS file area as `AmiBinkD10_34.lha`.
+BBS file area as `AmiBinkD10_35.lha`.
 
 **If you are on v10.23 or earlier, upgrade — your outbound mail is not being
 delivered.** Every bundle was announced as 0 bytes, because this toolchain's
@@ -23,6 +23,30 @@ literal from the one in the startup banner, and it was never updated — it
 still read v10.19 while the binary was v10.33. Fixed in v10.33; there is now
 one definition behind all three places the version appears. v10.34 also
 corrects the format of that string — see below.
+
+### What changed since v10.34
+
+One fix, and it is the reason to upgrade if you poll on a schedule.
+
+- **Polls no longer stall mid-session.** A poll could stop partway through
+  a handshake and stay stopped for ten minutes to two hours, ending only
+  when the remote gave up waiting. The process stayed alive and the log
+  went quiet, so nothing pointed at a cause. On C-Net/5, which runs polls
+  from the event scheduler, a stalled session holds the scheduler with it —
+  on 30 August a stuck 13:30 poll took the local console login down with it
+  until the machine was restarted.
+
+  The mailer was doing stale-lock maintenance on a lock its own live
+  session held. `q_scan_addrs()` runs from `complete_login()` in the middle
+  of the handshake and is handed the *remote's* AKAs, so the `.bsy` it
+  reached was the one this session created when it dialled — and it went to
+  the filesystem to tidy it up while the session sat on an unread socket.
+  Stall length tracked `kill_old_bsy` exactly (~2h while that was 2h, ~15m
+  once it was lowered), which is what identified it.
+
+  A held lock is not stale, so it is now skipped with no filesystem access
+  at all. Nine stalls in 243 scans before the fix; 36 polls begun and 36
+  ended across the five-day soak after it.
 
 ### What changed since v10.33
 

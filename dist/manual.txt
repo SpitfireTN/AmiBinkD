@@ -1,6 +1,6 @@
 AMIBINKD MANUAL
 Native AmigaOS 3.x port of binkd, the FTN mailer
-Version 10.34
+Version 10.35
 ===============================================================================
 
 Author (Amiga port): Gary "Spitfire" McCulloch
@@ -2263,7 +2263,7 @@ upstream, is at:
 
   https://github.com/SpitfireTN/AmiBinkD
 
-Releases are tagged: the tag v10.34 is the exact tree this executable
+Releases are tagged: the tag v10.35 is the exact tree this executable
 was built from. If you cannot reach GitHub, write to
 spitfiretn@gmail.com and the source will be sent to you.
 
