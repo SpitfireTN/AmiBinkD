@@ -15,6 +15,29 @@ DEFINES = -DAMIGA -DHAVE_STDARG_H -DHAVE_SNPRINTF -DHAVE_VSNPRINTF -DHAVE_INTMAX
           -DHAVE_UNISTD_H -DHAVE_SYS_TIME_H -DHAVE_SYS_PARAM_H -DHAVE_SYS_IOCTL_H \
           -DOS="\"Amiga\"" -DHTTPS -DAMIGADOS_4D_OUTBOUND
 
+# -DDIAG_HS is OFF (removed from DEFINES above on 2026-09-04, after Friday's
+# nodelist hatch). The instrumentation itself is kept in the source, entirely
+# behind #ifdef DIAG_HS, so it can be switched back on by appending the define
+# to the line above -- nothing else needs changing.
+#
+# DO NOT SHIP A BUILD WITH IT SET -- it logs several extra level-2 lines per
+# session, which is noise in a SysOp's log and would look like a fault in a
+# release. On this box it was writing ~31,000 lines a day and had grown the
+# log to 4.1 MB.
+#
+# It exists for the stall that has recurred twice: 2026-08-16 (67 min,
+# between client.c's "connected" and "pwd protected session") and
+# 2026-08-25/26 (seven stalls, 10-90 min, between the TRF line and that
+# same "pwd protected session"). Both times the process was alive and the
+# remote, not us, ended it. Breadcrumbs run from init_protocol() through
+# complete_login(), so the LAST line before the silence names the call that
+# blocked instead of us inferring it. Self-limiting: 150 lines per
+# protocol() entry, budget held in STATE (not a static -- session Processes
+# share one address space here).
+#
+# The stall has not recurred since the q_scan fix, so the define is off. Put it
+# back the moment one is suspected -- that is what it is for.
+
 # -DDIAG_OUTPATH is a TEMPORARY diagnostic (added 2026-08-13) that names which
 # writer put log text into state->out.path. Delete this define and the
 # DIAG_OUTPATH block in protocol.c once the free/use pair is identified.

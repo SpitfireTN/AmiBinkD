@@ -1681,22 +1681,46 @@ static char *select_inbound (FTN_ADDR *fa, int secure_flag, BINKD_CONFIG *config
 
 static int complete_login (STATE *state, BINKD_CONFIG *config)
 {
+  /* v10.35 diag: the 2026-08-25/26 stalls all died between the TRF log
+   * line ("Remote has Nb of mail...") and the "pwd protected session" line
+   * below -- 7 of them, 10 to 90 minutes each, always released by the
+   * REMOTE timing out rather than by us recovering.  Everything between
+   * those two points is in this function, and until now none of it carried
+   * a breadcrumb: the old "breadcrumbs off" call sat ABOVE the pwd log but
+   * BELOW these three calls, so a hang in any of them produced silence and
+   * looked identical to a hang in recv().  Each step is named separately
+   * because they fail differently: select_inbound() only builds a path,
+   * q_scan_addrs() walks the whole outbound directory, and q_sort() is
+   * pure CPU on the result. */
+  HS ("complete_login: entry");
   state->inbound = select_inbound (state->fa, state->state, config);
+  HS ("complete_login: select_inbound done -> %s",
+      state->inbound ? state->inbound : "(null)");
   if (OK_SEND_FILES (state, config) && state->q == NULL)
+  {
+    HS ("complete_login: about to q_scan_addrs");
     state->q = q_scan_addrs (0, state->fa, state->nfa, state->to ? 1 : 0, config);
+    HS ("complete_login: q_scan_addrs done");
+  }
   if (OK_SEND_FILES (state, config))
+  {
+    HS ("complete_login: about to q_sort");
     state->q = q_sort (state->q, state->fa, state->nfa, config);
+    HS ("complete_login: q_sort done");
+  }
   state->msgs_in_batch = 0;               /* Forget about login msgs */
+  if (state->state == P_SECURE)
+    Log (2, "pwd protected session (%s)",
+         (state->MD_flag == 1) ? "MD5" : "plain text");
   /* Handshake is over: this is the far side of the window the 2026-08-16
    * stall died inside, so stop spending breadcrumbs on the established
-   * session. */
+   * session.  This now sits BELOW the pwd log deliberately -- the log line
+   * is the marker we compare against, so the breadcrumbs have to outlive
+   * it or the last one before a hang is ambiguous. */
   HS ("handshake complete, breadcrumbs off");
 #ifdef DIAG_HS
   state->diag_hs_left = 0;
 #endif
-  if (state->state == P_SECURE)
-    Log (2, "pwd protected session (%s)",
-         (state->MD_flag == 1) ? "MD5" : "plain text");
   if (state->ND_flag & WE_ND)
   { state->NR_flag |= WE_NR;
     Log (5, "we are in ND mode");
