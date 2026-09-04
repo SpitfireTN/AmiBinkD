@@ -2,6 +2,9 @@
 *.o
 amiga/*.o
 amibinkd
+# the kept copy of each shipped binary, e.g. amibinkd.v10.34-RELEASE --
+# deliberately retained beside the source, deliberately not in history
+amibinkd.v*-RELEASE
 amiberry-test-stdout.log
 *.d
 amiga/*.d
