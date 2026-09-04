@@ -3014,7 +3014,7 @@ static int banner (STATE *state, BINKD_CONFIG *config)
    * BBS package. Mailer, OS and protocol only, built exactly like the
    * generic branch below so we match what the rest of the network sends:
    *
-   *   AmiBinkD/10.34/Amiga binkp/1.1     <- us (version from AMIBINKD_VERNUM)
+   *   AmiBinkD/10.35/Amiga binkp/1.1     <- us (version from AMIBINKD_VERNUM)
    *   binkd/1.1a-115/Linux binkp/1.1     <- stock binkd
    *   Mystic/1.12A49 binkp/1.0           <- Mystic (no OS field)
    *

@@ -64,7 +64,7 @@
 /* VERNUM is the bare number, for the VER string we send to peers, which
  * follows binkd's "name/version/os" convention ("binkd/1.1a-115/Linux").
  * VER is the same number with the "v" the log lines have always used. */
-#define AMIBINKD_VERNUM "10.34"
+#define AMIBINKD_VERNUM "10.35"
 #define AMIBINKD_VER  "v" AMIBINKD_VERNUM
 #define MAJOR 1
 #define MINOR 1
