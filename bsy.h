@@ -21,6 +21,12 @@ int bsy_add(FTN_ADDR *fa, bsy_t bt, BINKD_CONFIG *config);
 int bsy_test(FTN_ADDR *fa, bsy_t bt, BINKD_CONFIG *config);
 
 /*
+ * Is this lock held by a session running right now? 1 -- held, 0 -- not.
+ * Answered from memory only; performs no file or directory access.
+ */
+int bsy_isheld(FTN_ADDR *fa, bsy_t bt);
+
+/*
  */
 void bsy_remove(FTN_ADDR *fa, bsy_t bt, BINKD_CONFIG *config);
 

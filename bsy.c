@@ -176,6 +176,42 @@ int bsy_test (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 }
 
 /*
+ * v10.35: is this lock held by a session running right now?
+ *
+ * Answers from bsy_list alone -- no stat(), no open(), no directory access.
+ * That is the entire point. The caller is process_bsy(), which runs from
+ * q_scan_addrs() in the middle of a live handshake, so any file I/O it does
+ * there is I/O a session sits on with an unread socket.
+ *
+ * bsy_list is a plain global shared by every session Process (classic
+ * AmigaOS has one flat address space -- see the note in bsy_add() above),
+ * so a cell added by a sibling Process is visible here too: "held" means
+ * held by any live session, not merely by this one.
+ *
+ * Deliberately does NOT take the bsy semaphore. LockSem() is precisely the
+ * kind of wait this function exists to avoid -- bsy_add() holds that
+ * semaphore across create_sem_file(), so asking for it here would let the
+ * stall back in through the side door. The unlocked read is safe, and the
+ * race is benign in both directions:
+ *   - cells are never freed, only FA_ZERO'd and reused by
+ *     bsy_get_free_cell(), so a traversal cannot follow a dangling pointer;
+ *   - a read that misses a cell returns 0 and the caller simply behaves as
+ *     it did before this change;
+ *   - a read that matches a cell being released costs one skipped
+ *     maintenance pass, and the next outbound rescan does it again.
+ */
+int bsy_isheld (FTN_ADDR *fa0, bsy_t bt)
+{
+  BSY_ADDR *lst;
+
+  for (lst = bsy_list; lst; lst = lst->next)
+    if (lst->bt == bt && !FA_ISNULL (&lst->fa)
+        && ftnaddress_cmp (&lst->fa, fa0) == 0)
+      return 1;
+  return 0;
+}
+
+/*
  * v10.20: remove one of OUR OWN lock files, without the 4-second stall.
  *
  * bsy_remove() runs at session end (protocol.c:290) once per remote AKA, and

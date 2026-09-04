@@ -467,6 +467,38 @@ static void process_bsy (FTN_ADDR *fa, char *path, BINKD_CONFIG *config)
   if (node != NULL && node->hold_until > safe_time ())
     return;
 
+  /* v10.35: skip a node whose lock a live session is holding. Do not stat
+   * it, do not try to unlink it, do not touch the filesystem at all.
+   *
+   * This function runs from q_scan_addrs(), which complete_login() calls in
+   * the middle of a live binkp session, and q_scan_addrs() is handed the
+   * REMOTE's own AKAs -- so the lock it reaches here is normally the lock
+   * for the very node this session is talking to: ours, created by
+   * bsy_add() when the call started. Doing stale-lock maintenance on a lock
+   * we are actively holding is both wrong and expensive.
+   *
+   * Measured 2026-08-29..31, 9 stalls in 243 scans. Every one sat between
+   * the "about to q_scan_addrs" and "q_scan_addrs done" breadcrumbs, and
+   * every one ended in the same second this function finally took its
+   * kill-old-bsy branch on the session's own node -- 39:902/0@amiganet
+   * twice, and one of the pharcyde hub's AKAs. Stall length tracked
+   * kill-old-bsy exactly: ~7200s while that was 2h, then 904s three times
+   * running once it was cut to 15m. CNet runs its polls from the event
+   * scheduler, so the whole scheduler blocks with the session: on
+   * 2026-08-30 the 13:30 poll took local console login down with it until
+   * Amiberry was restarted at 14:14.
+   *
+   * A held lock is by definition not stale, so there is nothing here to
+   * clean up. Mark the node busy -- all the else-branch below would have
+   * done anyway -- and leave. */
+  if (bsy_isheld (fa, (!STRICMP (s, ".csy")) ? F_CSY : F_BSY))
+  {
+    if (node != NULL && node->busy != 'b'
+        && (!STRICMP (s, ".bsy") || !STRICMP (s, ".csy")))
+      node->busy = tolower (s[1]);
+    return;
+  }
+
   if (stat (path, &sb) == 0 && config->kill_old_bsy != 0
       && time (0) - sb.st_mtime > config->kill_old_bsy)
   {
