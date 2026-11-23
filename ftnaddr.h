@@ -42,9 +42,13 @@ int ftnamask_cmpm(char *, int, FTN_ADDR *);
 #ifdef AMIGADOS_4D_OUTBOUND
 void ftnaddress_to_filename_ (char *s, FTN_ADDR *fa, FTN_DOMAIN *pDomains, int aso);
 #define ftnaddress_to_filename(s, fa, config) ftnaddress_to_filename_(s, fa, (config)->pDomains.first, (config)->aso)
+void ftnaddress_to_bsyname_ (char *s, FTN_ADDR *fa, FTN_DOMAIN *pDomains, int aso, const char *bsy_dir);
+#define ftnaddress_to_bsyname(s, fa, config) ftnaddress_to_bsyname_(s, fa, (config)->pDomains.first, (config)->aso, (config)->bsy_dir)
 #else
 void ftnaddress_to_filename_ (char *s, FTN_ADDR *fa, FTN_DOMAIN *pDomains);
 #define ftnaddress_to_filename(s, fa, config) ftnaddress_to_filename_(s, fa, (config)->pDomains.first)
+void ftnaddress_to_bsyname_ (char *s, FTN_ADDR *fa, FTN_DOMAIN *pDomains, const char *bsy_dir);
+#define ftnaddress_to_bsyname(s, fa, config) ftnaddress_to_bsyname_(s, fa, (config)->pDomains.first, (config)->bsy_dir)
 #endif
 
 /*

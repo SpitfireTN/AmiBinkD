@@ -268,3 +268,101 @@ void ftnaddress_to_filename_ (char *s, FTN_ADDR *fa, FTN_DOMAIN *pDomains
     }
   }
 }
+
+/*
+ * v10.36: the same name, but rooted at `bsy_dir' instead of the domain's
+ * own outbound path.
+ *
+ * WHY THIS EXISTS, because it looks like gratuitous duplication:
+ *
+ * .bsy/.csy lock files traditionally live in the outbound, beside the flow
+ * files -- the FidoNet convention, so that two different mailers sharing one
+ * outbound can see each other's locks. The cost on AmigaOS is that every
+ * session creates and deletes files in the very directory q_scan() walks
+ * with readdir(), and readdir() here is Lock()/ExNext() out of the C
+ * runtime, and an ExNext() walk is explicitly STATEFUL: the autodoc says
+ * "important state information is associated with the parent lock", warns
+ * against releasing it between calls, and says reusing the FileInfoBlock
+ * "would lose important state information such that it will be impossible to
+ * continue scanning the parent directory".
+ *
+ * Be precise about what is and is not known here. The autodoc does NOT say
+ * what happens when a file is added to or removed from a directory that
+ * another Process is mid-scan on -- it does not address the case at all, and
+ * an earlier revision of this comment wrongly claimed it did. What is
+ * documented is that the scan carries position state the filesystem has to
+ * keep valid. Whether a concurrent create or delete disturbs that state is
+ * filesystem-dependent and unspecified, which is reason enough not to build
+ * on it, but it is an inference and not a guarantee.
+ *
+ * That is not a theoretical reading. rof-bbs froze three times (2026-07-31,
+ * 10-26, 10-31, the last for 19 hours) with the clientmgr alive and silent
+ * between "clientmgr started" and every logging point downstream of it --
+ * and the first thing do_client() does is q_scan(). The board goes with it,
+ * because CNet waits on Execute() with no timeout, so a poll that never
+ * returns takes the whole BBS down, local logins included.
+ *
+ * Note what this does NOT do: it does not touch bsy_remove() or
+ * bsy_unlink(). Those already delete the lock at session end and they work
+ * -- the outbound was measured empty of .bsy while the board was wedged.
+ * The hazard is the directory CHANGING during a walk, so a flawless
+ * create/delete cycle is still the thing that breaks the scan. Moving where
+ * it happens is the fix; making deletion "more reliable" could not help.
+ *
+ * The layout under bsy_dir is identical to the outbound's -- same domain
+ * dir, same zone extension, same .pnt nesting -- so two domains that share
+ * a zone cannot collide here any more than they do there.
+ *
+ * An empty bsy_dir keeps the pre-10.36 behaviour, which is the default.
+ */
+void ftnaddress_to_bsyname_ (char *s, FTN_ADDR *fa, FTN_DOMAIN *pDomains
+#ifdef AMIGADOS_4D_OUTBOUND
+		, int aso
+#endif
+		, const char *bsy_dir)
+{
+  FTN_DOMAIN *d;
+  const char *root;
+
+  if (bsy_dir == 0 || *bsy_dir == 0)
+  {
+    /* not configured: behave exactly as every release before 10.36 */
+    ftnaddress_to_filename_ (s, fa, pDomains
+#ifdef AMIGADOS_4D_OUTBOUND
+                             , aso
+#endif
+                             );
+    return;
+  }
+
+  if ((d = get_domain_info (fa->domain, pDomains)) == 0)
+  {
+    *s = 0;
+  }
+  else
+  {
+    char ext[] = "\0ext";	       /* ".ext" */
+    char pnt[] = "\0pnt/0000xxxx";     /* ".pnt..." */
+
+    root = bsy_dir;
+
+#ifdef AMIGADOS_4D_OUTBOUND
+    if (aso)
+      snprintf(s, MAXPATHLEN, "%s%s%s%s%u.%u.%u.%u",
+         root, PATH_SEPARATOR, d->dir,
+         PATH_SEPARATOR, fa->z, fa->net, fa->node, fa->p);
+    else
+#endif
+    {
+      if (fa->z != d->z[0])
+	sprintf (ext, ".%03x", fa->z);
+
+      if (fa->p != 0)
+	sprintf (pnt, ".pnt%s%08x", PATH_SEPARATOR, fa->p);
+
+      snprintf(s, MAXPATHLEN, "%s%s%s%s%s%04x%04x%s",
+        root, PATH_SEPARATOR, d->dir, ext, PATH_SEPARATOR,
+        fa->net, fa->node, pnt);
+    }
+  }
+}

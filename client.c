@@ -120,7 +120,17 @@ static int do_client(BINKD_CONFIG *config)
     q_free (SCAN_LISTED, config);
     if (config->printq)
       Log (-1, "scan\r");
+    /* v10.36: these two bracket the outbound walk deliberately.
+     * Three board freezes (2026-07-31, 10-26, 10-31) logged "clientmgr
+     * started" and then nothing at all -- no "started client", no
+     * "busy, skipping", no "queue is empty, quitting". Every one of those
+     * is downstream of this call, so the log could not tell us whether the
+     * scan was where it stopped. Now it can. Do not remove them to tidy the
+     * log: a hang that logs "entering" without "done" is the whole
+     * diagnosis, and it costs two lines per poll at loglevel 5. */
+    Log (5, "q_scan: entering outbound scan");
     q_scan (SCAN_LISTED, config);
+    Log (5, "q_scan: outbound scan done");
     config->q_present = 1;
     if (config->printq)
     {

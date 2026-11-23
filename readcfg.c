@@ -435,6 +435,7 @@ static KEYWORD keywords[] =
   {"kill-dup-partial-files", read_bool, &work_config.kill_dup_partial_files, 0, 0},
   {"kill-old-partial-files", read_time, &work_config.kill_old_partial_files, 1, DONT_CHECK},
   {"kill-old-bsy", read_time, &work_config.kill_old_bsy, 1, DONT_CHECK},
+  {"bsy-dir", read_string, work_config.bsy_dir, 'd', 0},
   {"percents", read_bool, &work_config.percents, 0, 0},
   {"minfree", read_int, &work_config.minfree, 0, DONT_CHECK},
   {"minfree-nonsecure", read_int, &work_config.minfree_nonsecure, 0, DONT_CHECK},

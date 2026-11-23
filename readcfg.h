@@ -186,6 +186,12 @@ struct _BINKD_CONFIG
   char       inbound[MAXPATHLEN + 1];
   char       inbound_nonsecure[MAXPATHLEN + 1];
   char       temp_inbound[MAXPATHLEN + 1];
+  /* v10.36: drawer for .bsy/.csy lock files. Empty (the default) keeps them
+   * in the outbound beside the flow files, which is the FidoNet convention
+   * and what every release before 10.36 did. Point it elsewhere and the
+   * outbound stops being written to while q_scan() walks it -- see the note
+   * on ftnaddress_to_bsyname_() in ftnaddr.c. */
+  char       bsy_dir[MAXPATHLEN + 1];
   char       logpath[MAXPATHLEN + 1];
   char       binlogpath[MAXPATHLEN + 1];
   char       fdinhist[MAXPATHLEN + 1];

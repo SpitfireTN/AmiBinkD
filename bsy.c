@@ -91,7 +91,7 @@ int bsy_add (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
   char buf[MAXPATHLEN + 1];
   int ok = 0;
 
-  ftnaddress_to_filename (buf, fa0, config);
+  ftnaddress_to_bsyname (buf, fa0, config);
 
   DIAG_BSY_LOG ("DIAG-BSY: add want-lock %s `%s'", bt == F_CSY ? "csy" : "bsy", buf);
   LockSem (&sem);
@@ -161,7 +161,7 @@ int bsy_test (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
 {
   char buf[MAXPATHLEN + 1];
 
-  ftnaddress_to_filename (buf, fa0, config);
+  ftnaddress_to_bsyname (buf, fa0, config);
   if (*buf)
   {
     strnzcat (buf, bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
@@ -293,7 +293,7 @@ void bsy_remove (FTN_ADDR *fa0, bsy_t bt, BINKD_CONFIG *config)
   char buf[MAXPATHLEN + 1], *p;
   BSY_ADDR *bsy;
 
-  ftnaddress_to_filename (buf, fa0, config);
+  ftnaddress_to_bsyname (buf, fa0, config);
   if (*buf)
   {
     strnzcat (buf, bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
@@ -347,7 +347,7 @@ void bsy_remove_all (BINKD_CONFIG *config)
   for (bsy = bsy_list; bsy; bsy = bsy->next)
   {
     if (FA_ISNULL (&bsy->fa)) continue; /* free cell */
-    ftnaddress_to_filename (buf, &bsy->fa, config);
+    ftnaddress_to_bsyname (buf, &bsy->fa, config);
     if (*buf)
     {
       strnzcat (buf, bsy->bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
@@ -475,7 +475,7 @@ void bsy_touch (BINKD_CONFIG *config)
     bt = cur->bt;
     ReleaseSem (&sem);
 
-    ftnaddress_to_filename (buf, &fa, config);
+    ftnaddress_to_bsyname (buf, &fa, config);
     if (*buf)
     {
       strnzcat (buf, bt == F_CSY ? ".csy" : ".bsy", sizeof (buf));
