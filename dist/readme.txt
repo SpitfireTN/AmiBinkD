@@ -3,7 +3,7 @@ Uploader:     spitfiretn@gmail.com
 Author:       Gary "Spitfire" McCulloch (Amiga port); binkd by Dima Maloff
               and the binkd project
 Type:         comm/fido
-Version:      10.35
+Version:      10.36
 Architecture: m68k-amigaos
 Distribution: Aminet
 Kurz:         Nativer AmigaOS FTN-Mailer (binkd-Port, ohne ixemul/ixnet)
@@ -227,6 +227,34 @@ Only ever observed under emulation.
 ===============================================================================
 VERSION HISTORY
 ===============================================================================
+
+v10.36 - Lock Files Out Of The Outbound
+---------------------------------------
+
+* New directive: bsy-dir <drawer>. It moves the .bsy and .csy lock files
+  out of the outbound into a drawer you name. Nothing changes unless you
+  set it -- the default leaves them in the outbound beside the flow files,
+  which is the FidoNet convention and what every release before this did.
+
+  Set it if you run polls from a scheduler that waits on them, as C-Net/5's
+  event system does. The reason is the outbound scan: every session creates
+  and deletes a lock file in the very drawer q_scan() walks with ExNext(),
+  and an ExNext() walk is stateful -- the autodoc warns that losing the
+  scan position makes it "impossible to continue scanning the parent
+  directory". Whether a concurrent create or delete disturbs that position
+  is filesystem-dependent and unspecified, so the safe course is to stop
+  writing to the drawer mid-scan. bsy-dir does exactly that.
+
+  Reign of Fire froze three times on this (2026-07-31, 10-26, and 10-31 for
+  nineteen hours), each with the client manager alive and the log silent
+  through the scan; on C-Net/5 a poll that never returns takes the whole
+  board down with it. Moving the locks removes the only concurrent writer
+  to the scanned drawer. It then soaked from 1 November through 22 November,
+  twenty-two clean daily cycles with no recurrence, before release.
+
+* Two q_scan: log lines (loglevel 5) now bracket the outbound scan, to pin
+  the cause for certain if a freeze ever recurs.
+
 
 v10.35 - Polls That Do Not Stall
 --------------------------------
@@ -859,7 +887,7 @@ AmigaOS-specific work that is not in upstream binkd, is at:
 
   https://github.com/SpitfireTN/AmiBinkD
 
-Each release is tagged, so v10.35 is the exact tree this executable was
+Each release is tagged, so v10.36 is the exact tree this executable was
 compiled from. If you cannot reach GitHub, write to
 spitfiretn@gmail.com and a copy of the source will be sent to you.
 

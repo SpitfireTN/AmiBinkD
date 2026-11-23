@@ -1,16 +1,10 @@
-AmiBinkD v10.35 - SpitfireTN Ent.
--=====================================-
-Native AmigaOS FTN mailer, binkd port.
-No ixemul/ixnet -- talks straight to
-bsdsocket.library. BinkP protocol with
-CRAM-MD5 auth, for any Amiga BBS. Log
-reads clean at the default level -- no
-masks to tune, no duplicate lines.
--=====================================-
-.--------https://www.rofbbs.com-------.
-| _____     _____                     |
-|| __  |___|   __|  call.rofbbs.com   |
-||    -| . |   __|Port: 6800 6400 8502|
-||__|__|___|__|      (423) 541-8271   |
-|                 call@call.rofbbs.com|
-`-------------------------------------'
+AmiBinkD v10.36 - native AmigaOS FTN
+mailer, binkd port. No ixemul, straight
+to bsdsocket. BinkP with CRAM-MD5.
+`-=-^ Spitfire - Reign of Fire BBS ^-=-'
+.--------https://www.rofbbs.com--------.
+| _____     _____  call@call.rofbbs.com|
+|| __  |___|   __|   call.rofbbs.com   |
+||    -| . |   __| Port: 6800 6400 8502|
+||__|__|___|__|       (423) 541-8271   |
+`--------------------------------------'

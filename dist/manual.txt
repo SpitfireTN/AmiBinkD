@@ -1,6 +1,6 @@
 AMIBINKD MANUAL
 Native AmigaOS 3.x port of binkd, the FTN mailer
-Version 10.35
+Version 10.36
 ===============================================================================
 
 Author (Amiga port): Gary "Spitfire" McCulloch
@@ -447,6 +447,64 @@ abnormal exit) older than the given age. See section 15 for this port's
 own finding about .bsy/.csy files -- kill-old-bsy does not appear to
 clear the specific busy-file condition seen there, which resolves itself
 each session regardless.
+
+
+-------------------------------------------------------------------------------
+bsy-dir                                                        (v10.36)
+-------------------------------------------------------------------------------
+
+  bsy-dir DH3:Echomail/BusyFlags
+
+Put .bsy/.csy lock files in their own drawer instead of in the outbound
+beside the flow files. Unset by default, which is the behaviour of every
+release before v10.36.
+
+Set this if a scheduler waits on your polls. An ExNext() walk on
+AmigaOS is stateful: the autodoc says important state is associated
+with the parent lock, and that losing it makes continuing the scan
+impossible. What the autodoc does NOT say is what happens when another
+Process adds or removes a file mid-scan -- it does not cover the case,
+so the behaviour is unspecified rather than documented-as-broken.
+Every session creates and deletes lock files in exactly the directory
+q_scan() walks, so the two touch the same object concurrently with no
+guarantee either way. Three freezes on the author's
+board (2026-07-31, 10-26, 10-31, the last for 19 hours) showed the
+clientmgr alive with the log silent from "clientmgr started" onwards,
+and q_scan() is the first thing after it. Under C-Net/5, which waits on
+Execute() with no timeout, that takes the entire BBS down -- including
+the local console login.
+
+This is NOT a change to the delete path. Locks are already removed at
+session end and that works. The hazard is the directory changing during
+a walk, so a correct create/delete cycle is still what breaks the scan.
+
+The drawer MUST already exist; AmiBinkD refuses to start otherwise
+rather than write locks somewhere you are not looking.
+
+The layout under it mirrors the outbound's, so domains sharing a zone
+cannot collide -- which means locks sit one level down, under the
+domain's own directory name, not loose in the drawer you named. With
+
+  domain fidonet DH3:Echomail/Outbound/ 1
+  bsy-dir DH3:Echomail/BusyFlags
+
+a lock lands at DH3:Echomail/BusyFlags/Outbound/1.154.10.0.bsy.
+AmiBinkD creates the subdirectory itself. Anything you write to sweep
+the drawer must recurse.
+
+NOTE: setting bsy-dir takes these locks out of kill-old-bsy's reach.
+That sweep runs off what the outbound scan enumerates, and the point of
+bsy-dir is that the scan no longer sees them. Normally this does not
+matter -- bsy_remove() deletes each lock at session end, and that is
+what keeps the drawer clean; kill-old-bsy was only a backstop for
+abnormal exits. But a mailer that dies mid-session now leaves a lock
+that persists until something removes it, and that node is skipped
+meanwhile. Sweep at boot, where no session can be live. Do not sweep
+while the daemon runs: you risk deleting a lock a live session holds,
+which is the failure kill-old-bsy's age test exists to prevent.
+
+Leave it unset if another mailer shares your outbound: locks living
+there is the convention that lets the two see each other.
 
 
 -------------------------------------------------------------------------------
@@ -2263,7 +2321,7 @@ upstream, is at:
 
   https://github.com/SpitfireTN/AmiBinkD
 
-Releases are tagged: the tag v10.35 is the exact tree this executable
+Releases are tagged: the tag v10.36 is the exact tree this executable
 was built from. If you cannot reach GitHub, write to
 spitfiretn@gmail.com and the source will be sent to you.
 

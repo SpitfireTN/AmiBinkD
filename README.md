@@ -6,11 +6,29 @@ ixnet.library.
 
 ---
 
-## Current release: v10.35 — recommended
+## Current release: v10.36 — recommended
 
-**v10.35 is the release to run.** Get it from the
+**v10.36 is the release to run.** Get it from the
 [releases page](https://github.com/SpitfireTN/AmiBinkD/releases) or from the
-BBS file area as `AmiBinkD10_35.lha`.
+BBS file area as `AmiBinkD10_36.lha`.
+
+## v10.36 — released after a clean soak
+
+v10.36 ran on Reign of Fire alone from 1 November, deliberately held back
+while the fault it addresses was given time to either recur or stay away. It
+did not recur: twenty-two consecutive daily cycles through 22 November, polls
+completing, no freeze. On that record it is released.
+
+Be clear about what the soak does and does not prove. The diagnosis behind
+`bsy-dir` is an inference, not a caught root cause — nobody has seen the
+program counter inside `readdir()`. The board froze three times (2026-07-31,
+10-26, and 10-31 for nineteen hours) with the clientmgr alive and the log
+silent across the outbound scan, and `bsy-dir` removes the only concurrent
+writer to the drawer that scan walks. That is sound hygiene on its own
+merits. The gaps between the three freezes were 87 days and then 5, so a
+clean three weeks is not proof — but it is the longest quiet the board has
+had, and it is the evidence there is. The two `q_scan:` log lines added
+alongside it stay in, to settle the question for certain if it ever recurs.
 
 **If you are on v10.23 or earlier, upgrade — your outbound mail is not being
 delivered.** Every bundle was announced as 0 bytes, because this toolchain's
@@ -23,6 +41,93 @@ literal from the one in the startup banner, and it was never updated — it
 still read v10.19 while the binary was v10.33. Fixed in v10.33; there is now
 one definition behind all three places the version appears. v10.34 also
 corrects the format of that string — see below.
+
+### What changed since v10.35
+
+One new config directive, `bsy-dir`, and two log lines. **Nothing changes
+unless you set the directive** — the default is the behaviour every release
+before this one had.
+
+- **`bsy-dir <drawer>` moves `.bsy`/`.csy` lock files out of the outbound.**
+  If you run polls from a scheduler that waits on them — C-Net/5's event
+  system does — set this. It is the difference between a mailer that can
+  wedge your whole BBS and one that cannot.
+
+  The reasoning. Lock files traditionally sit in the outbound beside the
+  flow files, which is the FidoNet convention and lets two mailers sharing
+  one outbound see each other's locks. The cost on AmigaOS is that every
+  session creates and deletes files in the exact directory `q_scan()` walks
+  with `readdir()` — and `readdir()` here is `Lock()`/`ExNext()` out of the
+  C runtime, and an `ExNext()` walk is explicitly **stateful** — the autodoc
+  says *"important state information is associated with the parent lock"*,
+  warns against releasing that lock between calls, and says reusing the
+  `FileInfoBlock` *"would lose important state information such that it will
+  be impossible to continue scanning the parent directory"*.
+
+  **What is not known, stated plainly:** the autodoc does not say what
+  happens when a file is added to or removed from a directory another
+  Process is mid-scan on. It does not address the case. Whether a concurrent
+  create or delete disturbs that position state is filesystem-dependent and
+  unspecified. That is reason enough not to build on it — but it is an
+  inference, not a documented guarantee, and this change rests on it.
+
+  Reign of Fire BBS froze three times on this — 2026-07-31, 10-26, and
+  10-31 for nineteen hours — each time with the clientmgr alive and the log
+  silent between `clientmgr started` and every logging point downstream of
+  it. The first thing `do_client()` does is `q_scan()`. Because C-Net waits
+  on `Execute()` with no timeout, a poll that never returns takes the board
+  with it: no maintenance, no outbound, and Control will not hand out a
+  port, so the sysop cannot even log in locally. `MODEM: OFF-LINE` in the
+  C-Net system monitor while every disk reads `ON-LINE` is the fingerprint.
+
+  **Be clear about what this is not.** It is not a fix to the delete path.
+  `bsy_remove()` already removes the lock at session end and it works —
+  the outbound was measured empty of `.bsy` while the board sat wedged. The
+  hazard is the directory *changing* during a walk, so a flawless
+  create/delete cycle is still what breaks the scan. Making deletion more
+  reliable could not have helped; moving where it happens is the fix.
+  `bsy_remove()` and `bsy_unlink()` are untouched.
+
+  The layout under `bsy-dir` mirrors the outbound's — same domain dir, same
+  zone extension, same `.pnt` nesting — so domains sharing a zone cannot
+  collide. **That means the locks sit one level down, under the domain's own
+  directory name**, not loose in the drawer you named. With
+  `domain fidonet DH3:Echomail/Outbound/ 1` and
+  `bsy-dir DH3:Echomail/BusyFlags`, a lock lands at
+  `DH3:Echomail/BusyFlags/Outbound/1.154.10.0.bsy`. AmiBinkD creates the
+  subdirectory itself; anything you write to sweep the drawer has to recurse.
+
+  The drawer must exist; AmiBinkD refuses to start if it does not, rather
+  than silently writing locks somewhere you are not looking.
+
+  **One behaviour genuinely changes when you set this, and you should know
+  it:** `kill-old-bsy` no longer reaches these locks. That sweep runs off
+  what the outbound scan enumerates, and the whole point here is that the
+  scan no longer sees them. In normal operation it does not matter —
+  `bsy_remove()` deletes each lock at session end, which is what actually
+  keeps the drawer clean, and `kill-old-bsy` was only ever a backstop for
+  abnormal exits. But if your mailer dies mid-session, its lock now persists
+  until something removes it, and that node will be skipped until it does.
+  Sweep the drawer at boot, where no session can be live; deleting locks
+  while the daemon is running risks pulling one out from under a session in
+  progress, which is exactly what `kill-old-bsy`'s age test exists to avoid.
+
+  **Leave it unset if another mailer shares your outbound.** The convention
+  exists for a reason and this opts out of it.
+
+- **The outbound scan is now bracketed by two log lines** at loglevel 5,
+  `q_scan: entering outbound scan` and `q_scan: outbound scan done`. Across
+  three freezes the log could not say whether the scan was where things
+  stopped, because every message that would have told us is downstream of
+  it. An "entering" with no "done" now says so outright.
+
+  **This diagnosis is well-supported but not proven.** The hang sits
+  between `clientmgr started` and everything after it, and `q_scan` walks a
+  directory another Process mutates — but nobody has caught the program
+  counter inside `readdir()`. The two log lines exist so the next
+  occurrence settles it instead of producing more reasoning from the same
+  evidence. If it ever logs "entering" and then "done" and *still* hangs,
+  the scan is exonerated and the search moves to `q_next_node()`.
 
 ### What changed since v10.34
 
